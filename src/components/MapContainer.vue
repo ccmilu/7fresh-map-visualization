@@ -223,47 +223,41 @@ function addStoreMarkers() {
   STORES.forEach(store => {
     // 根据准时率获取颜色
     const rate = store.on_time_rate * 100
-    const bgColor = getOnTimeBgColor(rate)
-    const borderColor = getOnTimeBorderColor(rate)
-    const iconBgColor = getOnTimeColor(rate)
+    const pinColor = getOnTimeColor(rate)
     
-    // 创建自定义标记内容 - 根据准时率显示不同背景色
+    // 创建经典图钉+上方文字标签样式
     const markerContent = `
       <div class="store-marker" style="
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 6px;
-        background: ${bgColor};
-        color: #0F172A;
-        padding: 8px 14px;
-        border-radius: 12px;
-        font-size: 13px;
-        font-weight: 500;
-        white-space: nowrap;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
         cursor: pointer;
         transform: translateX(-50%);
-        border: 2px solid ${borderColor};
-        transition: all 0.2s ease;
       ">
-        <span style="
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 24px;
-          height: 24px;
-          background: ${iconBgColor};
-          border-radius: 6px;
+        <!-- 文字标签 -->
+        <div style="
+          background: rgba(15, 23, 42, 0.75);
           color: white;
-        ">${storeIconSvg}</span>
-        <span>${store.name.replace('七鲜超市(', '').replace('京东七鲜(', '').replace(')', '')}</span>
+          padding: 3px 6px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 500;
+          white-space: nowrap;
+          margin-bottom: 4px;
+          backdrop-filter: blur(4px);
+        ">${store.name.replace('七鲜超市(', '').replace('京东七鲜(', '').replace(')', '')}</div>
+        <!-- 经典图钉 -->
+        <svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 20 12 20s12-11 12-20c0-6.627-5.373-12-12-12z" fill="${pinColor}"/>
+          <circle cx="12" cy="12" r="5" fill="white"/>
+        </svg>
       </div>
     `
 
     const marker = new AMap.Marker({
       position: [store.lon, store.lat],
       content: markerContent,
-      offset: new AMap.Pixel(0, -24),
+      offset: new AMap.Pixel(0, -52),
       extData: store
     })
 
