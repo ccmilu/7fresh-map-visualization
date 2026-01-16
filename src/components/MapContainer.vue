@@ -248,7 +248,7 @@ function addStoreMarkers() {
           color: white;
           padding: 3px 6px;
           border-radius: 4px;
-          font-size: 11px;
+          font-size: 13px;
           font-weight: 500;
           white-space: nowrap;
           margin-bottom: 4px;
