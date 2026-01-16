@@ -1,5 +1,31 @@
 import * as d3 from 'd3'
+import * as turf from '@turf/turf'
 import type { Store, ServiceArea, Coordinate } from '@/types'
+
+// 等时圈数据类型
+interface IsochroneStore {
+  store_id: number
+  store_name: string
+  center: [number, number]
+  isochrone: {
+    type: string
+    features: Array<{
+      type: string
+      geometry: {
+        type: string
+        coordinates: number[][][]
+      }
+      properties: {
+        area: number
+        reachfactor: number
+      }
+    }>
+  }
+}
+
+interface IsochroneData {
+  stores: IsochroneStore[]
+}
 
 /**
  * 使用D3的Delaunay生成泰森多边形
@@ -43,6 +69,130 @@ export function generateVoronoiAreas(
   })
 
   return areas
+}
+
+/**
+ * 生成带等时圈约束的服务范围
+ * 泰森多边形 ∩ 15分钟骑行等时圈 = 最终服务范围
+ */
+export function generateServiceAreasWithIsochrone(
+  stores: Store[],
+  isochroneData: IsochroneData,
+  bounds: [number, number, number, number] = [116.2, 39.75, 116.7, 40.05]
+): ServiceArea[] {
+  if (stores.length === 0) return []
+
+  // 先生成泰森多边形
+  const voronoiAreas = generateVoronoiAreas(stores, bounds)
+
+  // 与等时圈取交集
+  const serviceAreas: ServiceArea[] = voronoiAreas.map(area => {
+    const isoStore = isochroneData.stores.find(s => s.store_id === area.store_id)
+    
+    if (!isoStore || !isoStore.isochrone.features[0]) {
+      return area // 没有等时圈数据则返回原泰森多边形
+    }
+
+    const isoPolygonCoords = isoStore.isochrone.features[0].geometry.coordinates
+    const voronoiCoords = area.polygon.map(c => [c.lon, c.lat])
+    
+    // 确保多边形闭合
+    if (voronoiCoords.length > 0) {
+      const first = voronoiCoords[0]
+      const last = voronoiCoords[voronoiCoords.length - 1]
+      if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+        voronoiCoords.push([...first])
+      }
+    }
+
+    try {
+      // 创建Turf多边形
+      const voronoiPoly = turf.polygon([voronoiCoords])
+      const isoPoly = turf.polygon(isoPolygonCoords)
+      
+      // 计算交集
+      const intersection = turf.intersect(turf.featureCollection([voronoiPoly, isoPoly]))
+      
+      if (intersection && intersection.geometry.type === 'Polygon') {
+        let coords = intersection.geometry.coordinates[0] as number[][]
+        
+        // 简化多边形到8-12个顶点
+        const simplified = simplifyToTargetPoints(coords, 8, 12)
+        
+        const polygon: Coordinate[] = simplified.map(([lon, lat]) => ({ 
+          lat: lat!, 
+          lon: lon! 
+        }))
+
+        // 计算面积
+        const areaSqkm = turf.area(intersection) / 1_000_000
+
+        return {
+          ...area,
+          polygon,
+          area_sqkm: Math.round(areaSqkm * 100) / 100
+        }
+      }
+    } catch (e) {
+      console.warn(`计算门店 ${area.store_id} 交集失败:`, e)
+    }
+
+    return area
+  })
+
+  return serviceAreas
+}
+
+/**
+ * 将多边形简化到目标点数范围 (min-max)
+ */
+function simplifyToTargetPoints(
+  coords: number[][],
+  minPoints: number,
+  maxPoints: number
+): number[][] {
+  if (coords.length <= maxPoints) {
+    // 如果点数已经在范围内，保持不变
+    if (coords.length >= minPoints) return coords
+    // 点数太少，需要插值（罕见情况）
+    return coords
+  }
+
+  // 使用Turf简化
+  const line = turf.lineString(coords)
+  let tolerance = 0.0001 // 初始容差
+  let simplified = coords
+
+  // 逐步增加容差直到点数在范围内
+  while (simplified.length > maxPoints && tolerance < 0.01) {
+    const simplifiedLine = turf.simplify(line, { tolerance, highQuality: true })
+    simplified = simplifiedLine.geometry.coordinates as number[][]
+    tolerance *= 1.5
+  }
+
+  // 确保多边形闭合
+  if (simplified.length > 0) {
+    const first = simplified[0]
+    const last = simplified[simplified.length - 1]
+    if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+      simplified.push([...first])
+    }
+  }
+
+  // 如果简化后点数小于最小值，使用原始数据均匀采样
+  if (simplified.length < minPoints) {
+    const step = Math.floor(coords.length / minPoints)
+    simplified = []
+    for (let i = 0; i < coords.length && simplified.length < minPoints; i += step) {
+      simplified.push(coords[i]!)
+    }
+    // 确保闭合
+    if (simplified.length > 0 && coords[0]) {
+      simplified.push([...coords[0]])
+    }
+  }
+
+  return simplified
 }
 
 /**

@@ -2,6 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { STORES } from '@/data/stores'
+import serviceAreasData from '@/data/serviceAreas.json'
 
 const appStore = useAppStore()
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -14,6 +15,9 @@ let AMap: any = null
 
 // 门店标记点
 const storeMarkers: any[] = []
+
+// 服务范围多边形
+const serviceAreaPolygons: any[] = []
 
 onMounted(async () => {
   await initMap()
@@ -44,6 +48,9 @@ async function initMap() {
     mapInstance.addControl(new AMap.Scale())
     mapInstance.addControl(new AMap.ToolBar({ position: 'LT' }))
 
+    // 添加服务范围多边形（先绘制，在底层）
+    addServiceAreas()
+    
     // 添加门店标记
     addStoreMarkers()
 
@@ -57,6 +64,129 @@ async function initMap() {
 
 // 门店图标 SVG
 const storeIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/></svg>`
+
+// 添加服务范围多边形
+function addServiceAreas() {
+  if (!AMap || !mapInstance) return
+  
+  // 清除现有多边形
+  serviceAreaPolygons.forEach(p => mapInstance.remove(p))
+  serviceAreaPolygons.length = 0
+  
+  // 绘制每个门店的服务范围
+  serviceAreasData.areas.forEach((area: any) => {
+    // 转换坐标格式 [{lon, lat}] -> [[lon, lat]]
+    const path = area.polygon.map((p: any) => [p.lon, p.lat])
+    
+    if (path.length < 3) return
+    
+    const polygon = new AMap.Polygon({
+      path: path,
+      fillColor: area.color,
+      fillOpacity: 0.15,
+      strokeColor: area.color,
+      strokeWeight: 2,
+      strokeOpacity: 0.8,
+      strokeStyle: 'solid',
+      zIndex: 10
+    })
+    
+    // 悬停效果
+    polygon.on('mouseover', () => {
+      polygon.setOptions({
+        fillOpacity: 0.3,
+        strokeWeight: 3
+      })
+    })
+    
+    polygon.on('mouseout', () => {
+      polygon.setOptions({
+        fillOpacity: 0.15,
+        strokeWeight: 2
+      })
+    })
+    
+    // 点击显示信息
+    polygon.on('click', () => {
+      const store = STORES.find(s => s.id === area.store_id)
+      if (store) {
+        showServiceAreaInfo(area, store)
+      }
+    })
+    
+    serviceAreaPolygons.push(polygon)
+    mapInstance.add(polygon)
+  })
+}
+
+// 显示服务范围信息
+function showServiceAreaInfo(area: any, store: typeof STORES[0]) {
+  if (!AMap || !mapInstance) return
+  
+  const infoContent = `
+    <div style="
+      padding: 14px;
+      min-width: 220px;
+      font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    ">
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #F1F5F9;
+      ">
+        <div style="
+          width: 12px;
+          height: 12px;
+          background: ${area.color};
+          border-radius: 3px;
+        "></div>
+        <span style="font-size: 13px; font-weight: 600; color: #0F172A;">
+          ${store.name.replace('七鲜超市(', '').replace('京东七鲜(', '').replace(')', '')}
+        </span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">覆盖面积</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${area.area_sqkm} km²</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">日均单量</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${area.daily_orders} 单</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">订单密度</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${(area.daily_orders / area.area_sqkm).toFixed(1)} 单/km²</span>
+        </div>
+      </div>
+    </div>
+  `
+  
+  // 计算多边形中心点
+  const center = calculatePolygonCenter(area.polygon)
+  
+  const infoWindow = new AMap.InfoWindow({
+    content: infoContent,
+    offset: new AMap.Pixel(0, 0)
+  })
+  
+  infoWindow.open(mapInstance, center)
+}
+
+// 计算多边形中心点
+function calculatePolygonCenter(polygon: Array<{lon: number, lat: number}>): [number, number] {
+  let sumLon = 0, sumLat = 0
+  const n = polygon.length
+  
+  for (const p of polygon) {
+    sumLon += p.lon
+    sumLat += p.lat
+  }
+  
+  return [sumLon / n, sumLat / n]
+}
 
 // 添加门店标记点
 function addStoreMarkers() {
@@ -247,6 +377,24 @@ watch(() => appStore.currentStoreId, (storeId) => {
     showStoreInfo(store)
   }
 })
+
+// 监听服务范围图层可见性变化
+watch(() => appStore.visibleLayers, (layers) => {
+  if (!mapInstance) return
+  
+  const showServiceArea = layers.includes('serviceArea')
+  
+  if (showServiceArea && serviceAreaPolygons.length === 0) {
+    // 图层打开且多边形未绘制，添加多边形
+    addServiceAreas()
+  } else if (!showServiceArea && serviceAreaPolygons.length > 0) {
+    // 图层关闭，隐藏多边形
+    serviceAreaPolygons.forEach(p => p.hide())
+  } else if (showServiceArea && serviceAreaPolygons.length > 0) {
+    // 图层打开，显示多边形
+    serviceAreaPolygons.forEach(p => p.show())
+  }
+}, { deep: true })
 </script>
 
 <template>
