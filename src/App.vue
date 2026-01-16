@@ -1,9 +1,33 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import MapContainer from './components/MapContainer.vue'
 import Sidebar from './components/Sidebar.vue'
+import { generateInsights } from './utils/mockData'
 
 const sidebarOpen = ref(false)
+
+// 检查是否有高优先级洞察（红色警告）
+const insights = generateInsights()
+const hasHighPriorityAlert = computed(() => {
+  return insights.some(i => i.priority === 'high' || (i.type === 'warning' && i.priority !== 'low'))
+})
+const highPriorityCount = computed(() => {
+  return insights.filter(i => i.priority === 'high' || (i.type === 'warning' && i.priority !== 'low')).length
+})
+
+// 控制是否播放动画（点击后停止，刷新后恢复）
+const isAlertAnimating = ref(true)
+
+// 点击警告图标：停止动画 + 打开侧边栏并滚动到洞察区域
+function handleAlertClick() {
+  isAlertAnimating.value = false
+  sidebarOpen.value = true
+  // 等待侧边栏打开后滚动到洞察区域
+  setTimeout(() => {
+    const insightSection = document.querySelector('.sidebar-area .insight-card')
+    insightSection?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, 350)
+}
 </script>
 
 <template>
@@ -11,6 +35,27 @@ const sidebarOpen = ref(false)
     <!-- 地图区域 -->
     <div class="map-area flex-1 relative min-h-[50vh] lg:min-h-0">
       <MapContainer />
+      
+      <!-- 高优先级洞察跳动提示图标 -->
+      <button
+        v-if="hasHighPriorityAlert"
+        @click="handleAlertClick"
+        :class="[
+          'absolute top-4 right-4 lg:right-[420px] z-50 flex items-center gap-2 px-3 py-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors',
+          isAlertAnimating ? 'alert-pulse' : ''
+        ]"
+        title="有紧急洞察需要关注"
+      >
+        <span :class="['relative flex items-center justify-center', isAlertAnimating ? 'alert-icon' : '']">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+            <path d="M12 9v4"/>
+            <path d="M12 17h.01"/>
+          </svg>
+          <span v-if="isAlertAnimating" class="ping-ring"></span>
+        </span>
+        <span class="text-sm font-medium hidden sm:inline">{{ highPriorityCount }}条预警</span>
+      </button>
       
       <!-- 移动端展开侧边栏按钮 -->
       <button 
@@ -50,5 +95,50 @@ const sidebarOpen = ref(false)
 <style scoped>
 .app-container {
   font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+/* 警告图标跳动动画 */
+.alert-pulse {
+  animation: pulse-bounce 2s ease-in-out infinite;
+}
+
+.alert-icon {
+  animation: shake 0.5s ease-in-out infinite;
+}
+
+.ping-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes pulse-bounce {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  75%, 100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
 }
 </style>
