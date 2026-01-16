@@ -436,43 +436,93 @@ function calculatePathDuration(path: { lat: number; lon: number }[]): number {
 
 /**
  * 生成洞察建议
+ * 包含：超时预警、配送黑洞、路径优化、表现优异等多种洞察类型
  */
 export function generateInsights(): Insight[] {
   const insights: Insight[] = []
 
-  // 检查各门店数据生成洞察
+  // ========== 1. 门店准时率洞察 ==========
   for (const store of STORES) {
-    // 超时预警
+    // 超时预警：准时率 < 88%
     if (store.on_time_rate < 0.88) {
       insights.push({
         id: `warning-${store.id}`,
         type: 'warning',
         title: '超时预警',
-        description: `${store.name.replace('七鲜超市(', '').replace(')', '')}准时率${(store.on_time_rate * 100).toFixed(0)}%，建议增派骑手`,
+        description: `${formatStoreName(store.name)}准时率${(store.on_time_rate * 100).toFixed(0)}%，建议增派骑手`,
         store_id: store.id,
         priority: store.on_time_rate < 0.85 ? 'high' : 'medium'
       })
     }
 
-    // 表现优异
+    // 表现优异：准时率 >= 91%
     if (store.on_time_rate >= 0.91) {
       insights.push({
         id: `success-${store.id}`,
         type: 'success',
         title: '表现优异',
-        description: `${store.name.replace('七鲜超市(', '').replace(')', '')}准时率${(store.on_time_rate * 100).toFixed(0)}%`,
+        description: `${formatStoreName(store.name)}准时率${(store.on_time_rate * 100).toFixed(0)}%，可推广经验`,
         store_id: store.id,
         priority: 'low'
       })
     }
   }
 
-  // 添加通用优化建议
+  // ========== 2. 配送黑洞洞察（基于超时聚集区域） ==========
+  const timeoutOrders = getAllTimeoutOrders()
+  const clusters = identifyTimeoutClusters(timeoutOrders)
+  
+  if (clusters.length > 0) {
+    // 找出最严重的聚集区域
+    const worstCluster = clusters.reduce((a, b) => a.count > b.count ? a : b)
+    
+    // 找到该区域对应的门店
+    const nearestStore = findNearestStore(worstCluster.center.lat, worstCluster.center.lon)
+    
+    // 分析该区域的超时原因
+    const clusterOrders = timeoutOrders.filter(o => {
+      const dist = Math.sqrt(
+        Math.pow((o.lat - worstCluster.center.lat) * 111, 2) +
+        Math.pow((o.lon - worstCluster.center.lon) * 85, 2)
+      )
+      return dist < worstCluster.radius / 1000
+    })
+    
+    // 统计主要超时原因
+    const reasonStats: { [key: string]: number } = {}
+    clusterOrders.forEach(o => {
+      reasonStats[o.reason] = (reasonStats[o.reason] || 0) + 1
+    })
+    const mainReason = Object.entries(reasonStats).sort((a, b) => b[1] - a[1])[0]
+    
+    insights.push({
+      id: 'blackhole-1',
+      type: 'warning',
+      title: '配送黑洞',
+      description: `${formatStoreName(nearestStore?.name || '')}附近发现${worstCluster.count}单超时聚集，主因：${mainReason?.[0] || '未知'}`,
+      store_id: nearestStore?.id,
+      priority: 'high'
+    })
+  }
+
+  // ========== 3. 配送路径优化洞察 ==========
+  const routeInsight = generateRouteOptimizationInsight()
+  if (routeInsight) {
+    insights.push(routeInsight)
+  }
+
+  // ========== 4. 服务范围洞察 ==========
+  const overlapInsight = generateOverlapInsight()
+  if (overlapInsight) {
+    insights.push(overlapInsight)
+  }
+
+  // ========== 5. 通用运力建议 ==========
   insights.push({
-    id: 'suggestion-1',
+    id: 'suggestion-peak',
     type: 'suggestion',
-    title: '优化建议',
-    description: '高峰期(11:00-13:00)建议提前调配运力',
+    title: '运力调配',
+    description: '高峰期(11:00-13:00)建议提前增派2名骑手',
     priority: 'medium'
   })
 
@@ -480,5 +530,121 @@ export function generateInsights(): Insight[] {
   const priorityOrder = { high: 0, medium: 1, low: 2 }
   insights.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
 
-  return insights.slice(0, 5) // 返回前5条
+  return insights.slice(0, 6) // 返回前6条
+}
+
+/**
+ * 格式化门店名称（去掉前后缀）
+ */
+function formatStoreName(name: string): string {
+  return name
+    .replace('七鲜超市(', '')
+    .replace('京东七鲜(', '')
+    .replace(')', '')
+}
+
+/**
+ * 找到距离指定坐标最近的门店
+ */
+function findNearestStore(lat: number, lon: number): typeof STORES[0] | null {
+  let minDist = Infinity
+  let nearest: typeof STORES[0] | null = null
+  
+  for (const store of STORES) {
+    const dist = Math.sqrt(
+      Math.pow((store.lat - lat) * 111, 2) +
+      Math.pow((store.lon - lon) * 85, 2)
+    )
+    if (dist < minDist) {
+      minDist = dist
+      nearest = store
+    }
+  }
+  
+  return nearest
+}
+
+/**
+ * 生成配送路径优化洞察
+ * 基于配送行程数据，计算全门店的路径优化空间
+ */
+function generateRouteOptimizationInsight(): Insight | null {
+  let totalTimeSaved = 0
+  let tripCount = 0
+  let maxSavingStore: typeof STORES[0] | null = null
+  let maxSavingPercent = 0
+  
+  for (const store of STORES) {
+    const trips = generateDeliveryTrips(store.id, 5)
+    
+    for (const trip of trips) {
+      totalTimeSaved += trip.time_saved
+      tripCount++
+      
+      const savingPercent = trip.time_saved / trip.actual_duration
+      if (savingPercent > maxSavingPercent) {
+        maxSavingPercent = savingPercent
+        maxSavingStore = store
+      }
+    }
+  }
+  
+  // 如果优化空间超过10%，生成洞察
+  const avgSavingPercent = tripCount > 0 ? (totalTimeSaved / tripCount) / 25 : 0 // 假设平均行程25分钟
+  
+  if (avgSavingPercent > 0.08 && maxSavingStore) {
+    return {
+      id: 'route-optimization',
+      type: 'suggestion',
+      title: '路径优化',
+      description: `应用优化路径可日均节省${Math.round(totalTimeSaved / 5)}分钟，${formatStoreName(maxSavingStore.name)}提升空间最大`,
+      store_id: maxSavingStore.id,
+      priority: 'medium'
+    }
+  }
+  
+  return null
+}
+
+/**
+ * 生成服务范围重叠洞察
+ * 检测门店服务范围是否存在明显重叠
+ */
+function generateOverlapInsight(): Insight | null {
+  // 简化处理：检查门店间距离，距离过近意味着服务范围可能重叠
+  const overlapPairs: { store1: typeof STORES[0]; store2: typeof STORES[0]; distance: number }[] = []
+  
+  for (let i = 0; i < STORES.length; i++) {
+    for (let j = i + 1; j < STORES.length; j++) {
+      const s1 = STORES[i]!
+      const s2 = STORES[j]!
+      
+      // 计算两门店间距离（km）
+      const distance = Math.sqrt(
+        Math.pow((s1.lat - s2.lat) * 111, 2) +
+        Math.pow((s1.lon - s2.lon) * 85, 2)
+      )
+      
+      // 如果距离小于4km，可能存在服务范围重叠
+      if (distance < 4) {
+        overlapPairs.push({ store1: s1, store2: s2, distance })
+      }
+    }
+  }
+  
+  if (overlapPairs.length > 0) {
+    // 找出距离最近的一对
+    const closest = overlapPairs.sort((a, b) => a.distance - b.distance)[0]!
+    const overlapPercent = Math.round((1 - closest.distance / 4) * 40) // 估算重叠比例
+    
+    return {
+      id: 'overlap-warning',
+      type: 'suggestion',
+      title: '范围重叠',
+      description: `${formatStoreName(closest.store1.name)}与${formatStoreName(closest.store2.name)}服务范围重叠约${overlapPercent}%，建议动态调整边界`,
+      priority: overlapPercent > 25 ? 'medium' : 'low'
+    }
+  }
+  
+  return null
 }

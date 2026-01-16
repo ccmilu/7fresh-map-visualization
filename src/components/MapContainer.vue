@@ -398,7 +398,7 @@ async function addHeatmapLayer() {
   
   try {
     // 动态加载热力图插件
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve) => {
       AMap.plugin('AMap.HeatMap', () => {
         resolve()
       })
