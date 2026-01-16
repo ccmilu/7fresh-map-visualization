@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { LayerType, Store } from '@/types'
+import type { LayerType, Store, DeliveryTrip } from '@/types'
 import { STORES } from '@/data/stores'
+import { generateDeliveryTrips } from '@/utils/mockData'
 
 export const useAppStore = defineStore('app', () => {
   // 状态
@@ -9,6 +10,8 @@ export const useAppStore = defineStore('app', () => {
   const visibleLayers = ref<LayerType[]>(['stores', 'serviceArea', 'heatmap', 'timeout'])
   const selectedTripId = ref<string | null>(null)
   const heatmapStoreId = ref<number | null>(null) // null 表示显示所有门店热力图
+  const routeStoreId = ref<number>(1) // 路径分析的门店ID
+  const deliveryTrips = ref<DeliveryTrip[]>(generateDeliveryTrips(1, 5)) // 配送行程数据
 
   // 计算属性
   const currentStore = computed<Store | null>(() => {
@@ -67,21 +70,38 @@ export const useAppStore = defineStore('app', () => {
     heatmapStoreId.value = storeId
   }
 
+  // 设置路径分析的门店
+  const setRouteStore = (storeId: number) => {
+    routeStoreId.value = storeId
+    deliveryTrips.value = generateDeliveryTrips(storeId, 5)
+    selectedTripId.value = null
+  }
+
+  // 获取选中的行程数据
+  const selectedTrip = computed<DeliveryTrip | null>(() => {
+    if (!selectedTripId.value) return null
+    return deliveryTrips.value.find(t => t.trip_id === selectedTripId.value) || null
+  })
+
   return {
     // 状态
     currentStoreId,
     visibleLayers,
     selectedTripId,
     heatmapStoreId,
+    routeStoreId,
+    deliveryTrips,
     // 计算属性
     currentStore,
     isLayerVisible,
+    selectedTrip,
     // 方法
     selectStore,
     toggleLayer,
     setLayer,
     selectTrip,
     resetState,
-    setHeatmapStore
+    setHeatmapStore,
+    setRouteStore
   }
 })

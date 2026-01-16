@@ -69,6 +69,28 @@ function onHeatmapStoreChange(event: Event) {
   const value = target.value
   appStore.setHeatmapStore(value === 'all' ? null : Number(value))
 }
+
+// 配送行程相关 - 从 store 获取共享数据
+const routeStoreId = computed(() => appStore.routeStoreId)
+const deliveryTrips = computed(() => appStore.deliveryTrips)
+const selectedTripId = computed(() => appStore.selectedTripId)
+const selectedTrip = computed(() => appStore.selectedTrip)
+
+// 选择行程
+function selectTrip(tripId: string) {
+  appStore.selectTrip(tripId)
+}
+
+// 格式化门店名称
+function formatStoreName(name: string): string {
+  return name.replace('七鲜超市(', '').replace('京东七鲜(', '').replace(')', '')
+}
+
+// 路径门店筛选变化
+function onRouteStoreChange(event: Event) {
+  const target = event.target as HTMLSelectElement
+  appStore.setRouteStore(Number(target.value))
+}
 </script>
 
 <template>
@@ -161,6 +183,93 @@ function onHeatmapStoreChange(event: Event) {
               </select>
             </div>
           </template>
+          <!-- 路径分析门店筛选 -->
+          <div
+            v-if="appStore.visibleLayers.includes('route')"
+            class="ml-12 mt-1 mb-2"
+          >
+            <select
+              :value="routeStoreId"
+              @change="onRouteStoreChange($event)"
+              class="w-full px-3 py-2 text-sm bg-surface-secondary border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-jd-red/20 focus:border-jd-red transition-colors"
+            >
+              <option v-for="store in STORES" :key="store.id" :value="store.id">
+                {{ formatStoreName(store.name) }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- 配送行程列表（仅在路径分析图层开启时显示） -->
+      <section v-if="appStore.visibleLayers.includes('route')" class="p-4 border-t border-border-light">
+        <h3 class="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">配送行程</h3>
+        <div class="space-y-2">
+          <div
+            v-for="trip in deliveryTrips"
+            :key="trip.trip_id"
+            @click="selectTrip(trip.trip_id)"
+            :class="[
+              'trip-card p-3 rounded-xl border cursor-pointer transition-all',
+              selectedTripId === trip.trip_id 
+                ? 'bg-blue-50 border-blue-300 shadow-card ring-1 ring-blue-400 ring-offset-1' 
+                : 'bg-surface-secondary border-border-light hover:bg-blue-50/50 hover:border-blue-200'
+            ]"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <Icon name="route" class="w-3.5 h-3.5 text-blue-600" />
+                </div>
+                <span class="text-sm font-medium text-text-primary">行程 {{ trip.trip_id.slice(-2) }}</span>
+              </div>
+              <span class="text-xs text-text-tertiary">{{ trip.orders.length - 1 }}个配送点</span>
+            </div>
+            <div class="flex items-center gap-4 text-xs">
+              <div class="flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                <span class="text-text-secondary">实际 {{ trip.actual_duration }}分钟</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span class="text-text-secondary">优化 {{ trip.optimal_duration }}分钟</span>
+              </div>
+              <span 
+                v-if="trip.time_saved > 0"
+                class="ml-auto px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700"
+              >
+                省{{ trip.time_saved }}分钟
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 选中行程详情 -->
+        <div v-if="selectedTrip" class="mt-4 p-3 bg-gradient-to-br from-blue-50 to-emerald-50 rounded-xl border border-blue-200">
+          <div class="flex items-center gap-2 mb-3">
+            <Icon name="route" class="w-4 h-4 text-blue-600" />
+            <span class="text-sm font-medium text-text-primary">路径对比详情</span>
+          </div>
+          <div class="space-y-2 text-xs">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-0.5 bg-blue-500 rounded"></span>
+                <span class="text-text-secondary">实际路径（蓝色虚线）</span>
+              </div>
+              <span class="font-medium text-text-primary">{{ selectedTrip.actual_duration }} 分钟</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-0.5 bg-emerald-500 rounded"></span>
+                <span class="text-text-secondary">优化路径（绿色实线）</span>
+              </div>
+              <span class="font-medium text-text-primary">{{ selectedTrip.optimal_duration }} 分钟</span>
+            </div>
+            <div class="pt-2 mt-2 border-t border-blue-200/50 flex items-center justify-between">
+              <span class="text-text-secondary">优化后可节省</span>
+              <span class="font-bold text-emerald-600">{{ selectedTrip.time_saved }} 分钟</span>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -4,7 +4,7 @@ import { useAppStore } from '@/stores/app'
 import { STORES } from '@/data/stores'
 import serviceAreasData from '@/data/serviceAreas.json'
 import { generateHeatmapData, getAllTimeoutOrders, identifyTimeoutClusters } from '@/utils/mockData'
-import type { TimeoutOrder } from '@/types'
+import type { TimeoutOrder, DeliveryTrip } from '@/types'
 
 const appStore = useAppStore()
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -30,6 +30,11 @@ const timeoutMarkers: any[] = []
 const timeoutClusterCircles: any[] = []
 let timeoutOrders: TimeoutOrder[] = []
 let timeoutClusters: { center: { lat: number; lon: number }; count: number; radius: number }[] = []
+
+// 配送路径相关
+let actualPathPolyline: any = null
+let optimalPathPolyline: any = null
+const deliveryPointMarkers: any[] = []
 
 onMounted(async () => {
   await initMap()
@@ -711,6 +716,335 @@ watch(() => appStore.visibleLayers, (layers) => {
 // 监听热力图门店筛选变化
 watch(() => appStore.heatmapStoreId, () => {
   updateHeatmapData()
+})
+
+// ==================== 配送路径相关 ====================
+
+// 绘制配送路径
+function drawDeliveryRoute(trip: DeliveryTrip) {
+  if (!AMap || !mapInstance) return
+  
+  // 清除现有路径
+  clearDeliveryRoute()
+  
+  // 转换路径坐标格式
+  const actualPath = trip.actual_path.map(p => [p.lon, p.lat])
+  const optimalPath = trip.optimal_path.map(p => [p.lon, p.lat])
+  
+  // 绘制实际路径（蓝色虚线）
+  actualPathPolyline = new AMap.Polyline({
+    path: actualPath,
+    strokeColor: '#3B82F6',
+    strokeWeight: 4,
+    strokeOpacity: 0.9,
+    strokeStyle: 'dashed',
+    strokeDasharray: [10, 5],
+    lineJoin: 'round',
+    lineCap: 'round',
+    zIndex: 50
+  })
+  
+  // 绘制优化路径（绿色实线）
+  optimalPathPolyline = new AMap.Polyline({
+    path: optimalPath,
+    strokeColor: '#10B981',
+    strokeWeight: 4,
+    strokeOpacity: 0.9,
+    strokeStyle: 'solid',
+    lineJoin: 'round',
+    lineCap: 'round',
+    zIndex: 51
+  })
+  
+  mapInstance.add(actualPathPolyline)
+  mapInstance.add(optimalPathPolyline)
+  
+  // 添加配送点标记
+  addDeliveryPointMarkers(trip)
+  
+  // 调整视野以包含所有路径点
+  const allPoints = [...actualPath, ...optimalPath]
+  mapInstance.setFitView([actualPathPolyline, optimalPathPolyline], false, [50, 50, 50, 400])
+}
+
+// 添加配送点标记（实际路径蓝色 + 优化路径绿色）
+function addDeliveryPointMarkers(trip: DeliveryTrip) {
+  if (!AMap || !mapInstance) return
+  
+  // 清除现有标记
+  deliveryPointMarkers.forEach(m => mapInstance.remove(m))
+  deliveryPointMarkers.length = 0
+  
+  // 门店标记（共用）
+  const storePoint = trip.orders[0]
+  if (storePoint) {
+    const storeMarkerContent = `
+      <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transform: translateX(-50%);
+      ">
+        <div style="
+          width: 36px;
+          height: 36px;
+          background: linear-gradient(135deg, #E2231A, #C41E1A);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(226, 35, 26, 0.4);
+          border: 3px solid white;
+        ">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+            <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
+            <path d="M2 7h20"/>
+          </svg>
+        </div>
+        <div style="
+          margin-top: 4px;
+          background: rgba(226, 35, 26, 0.9);
+          color: white;
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: 600;
+        ">起点</div>
+      </div>
+    `
+    
+    const storeMarker = new AMap.Marker({
+      position: [storePoint.lon, storePoint.lat],
+      content: storeMarkerContent,
+      offset: new AMap.Pixel(0, -45),
+      zIndex: 65
+    })
+    
+    storeMarker.on('click', () => {
+      showDeliveryPointInfo(storePoint, 0, trip)
+    })
+    
+    deliveryPointMarkers.push(storeMarker)
+    mapInstance.add(storeMarker)
+  }
+  
+  // 实际路径标记（蓝色，左侧偏移）- 跳过门店
+  trip.actual_path.forEach((point, index) => {
+    if (index === 0) return // 跳过门店
+    
+    const markerContent = `
+      <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transform: translateX(-50%);
+      ">
+        <div style="
+          width: 24px;
+          height: 24px;
+          background: linear-gradient(135deg, #3B82F6, #2563EB);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+          border: 2px solid white;
+          color: white;
+          font-size: 11px;
+          font-weight: 700;
+        ">${index}</div>
+        <div style="
+          margin-top: 2px;
+          font-size: 9px;
+          color: #3B82F6;
+          font-weight: 600;
+        ">实际</div>
+      </div>
+    `
+    
+    const marker = new AMap.Marker({
+      position: [point.lon - 0.0008, point.lat], // 左侧偏移
+      content: markerContent,
+      offset: new AMap.Pixel(0, -30),
+      zIndex: 55
+    })
+    
+    deliveryPointMarkers.push(marker)
+    mapInstance.add(marker)
+  })
+  
+  // 优化路径标记（绿色，右侧偏移）- 跳过门店
+  trip.optimal_path.forEach((point, index) => {
+    if (index === 0) return // 跳过门店
+    
+    const markerContent = `
+      <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transform: translateX(-50%);
+      ">
+        <div style="
+          width: 24px;
+          height: 24px;
+          background: linear-gradient(135deg, #10B981, #059669);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+          border: 2px solid white;
+          color: white;
+          font-size: 11px;
+          font-weight: 700;
+        ">${index}</div>
+        <div style="
+          margin-top: 2px;
+          font-size: 9px;
+          color: #10B981;
+          font-weight: 600;
+        ">优化</div>
+      </div>
+    `
+    
+    const marker = new AMap.Marker({
+      position: [point.lon + 0.0008, point.lat], // 右侧偏移
+      content: markerContent,
+      offset: new AMap.Pixel(0, -30),
+      zIndex: 56
+    })
+    
+    deliveryPointMarkers.push(marker)
+    mapInstance.add(marker)
+  })
+}
+
+// 显示配送点信息
+function showDeliveryPointInfo(point: { seq: number; lat: number; lon: number }, index: number, trip: DeliveryTrip) {
+  if (!AMap || !mapInstance) return
+  
+  const isStore = index === 0
+  const store = STORES.find(s => s.id === trip.store_id)
+  
+  const infoContent = isStore ? `
+    <div style="
+      padding: 14px;
+      min-width: 200px;
+      font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    ">
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #F1F5F9;
+      ">
+        <div style="
+          width: 28px;
+          height: 28px;
+          background: #E2231A;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+            <path d="M2 7h20"/>
+          </svg>
+        </div>
+        <span style="font-size: 13px; font-weight: 600; color: #0F172A;">
+          ${store?.name.replace('七鲜超市(', '').replace('京东七鲜(', '').replace(')', '') || '门店'}
+        </span>
+      </div>
+      <div style="font-size: 12px; color: #64748B;">配送起点</div>
+    </div>
+  ` : `
+    <div style="
+      padding: 14px;
+      min-width: 180px;
+      font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    ">
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #F1F5F9;
+      ">
+        <div style="
+          width: 28px;
+          height: 28px;
+          background: #3B82F6;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-size: 12px;
+          font-weight: 700;
+        ">${index}</div>
+        <span style="font-size: 13px; font-weight: 600; color: #0F172A;">配送点 ${index}</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="display: flex; justify-content: space-between;">
+          <span style="font-size: 12px; color: #64748B;">配送顺序</span>
+          <span style="font-size: 12px; font-weight: 600; color: #0F172A;">第 ${index} 站</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="font-size: 12px; color: #64748B;">预计停留</span>
+          <span style="font-size: 12px; font-weight: 600; color: #0F172A;">3 分钟</span>
+        </div>
+      </div>
+    </div>
+  `
+  
+  const infoWindow = new AMap.InfoWindow({
+    content: infoContent,
+    offset: new AMap.Pixel(0, isStore ? -45 : -32)
+  })
+  
+  infoWindow.open(mapInstance, [point.lon, point.lat])
+}
+
+// 清除配送路径
+function clearDeliveryRoute() {
+  if (mapInstance) {
+    if (actualPathPolyline) {
+      mapInstance.remove(actualPathPolyline)
+      actualPathPolyline = null
+    }
+    if (optimalPathPolyline) {
+      mapInstance.remove(optimalPathPolyline)
+      optimalPathPolyline = null
+    }
+    deliveryPointMarkers.forEach(m => mapInstance.remove(m))
+    deliveryPointMarkers.length = 0
+  }
+}
+
+// 监听选中行程变化 - 使用 store 的 selectedTrip
+watch(() => appStore.selectedTrip, (trip) => {
+  if (!mapInstance) return
+  
+  if (trip) {
+    drawDeliveryRoute(trip)
+  } else {
+    clearDeliveryRoute()
+  }
+}, { immediate: true })
+
+// 监听路径图层可见性
+watch(() => appStore.visibleLayers.includes('route'), (visible) => {
+  if (!visible) {
+    clearDeliveryRoute()
+    appStore.selectTrip(null)
+  }
 })
 </script>
 
