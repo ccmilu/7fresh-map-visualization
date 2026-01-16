@@ -25,7 +25,7 @@ async function initMap() {
     // 动态加载高德地图
     const AMapLoader = await import('@amap/amap-jsapi-loader')
     AMap = await AMapLoader.default.load({
-      key: 'f0b62029693159ed13b40c40b7a48370',
+      key: '71beb60258a28988aa531f25c1adc9c0',
       version: '2.0',
       plugins: ['AMap.Scale', 'AMap.ToolBar']
     })

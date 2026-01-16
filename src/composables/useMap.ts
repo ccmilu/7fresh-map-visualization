@@ -2,7 +2,7 @@ import { ref, shallowRef, onUnmounted } from 'vue'
 import AMapLoader from '@amap/amap-jsapi-loader'
 
 // 高德地图Key
-const AMAP_KEY = 'f0b62029693159ed13b40c40b7a48370'
+const AMAP_KEY = '71beb60258a28988aa531f25c1adc9c0'
 const AMAP_VERSION = '2.0'
 
 export function useMap(containerId: string) {
