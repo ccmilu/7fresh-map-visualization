@@ -50,7 +50,7 @@ async function initMap() {
 
     mapInstance = new AMap.Map(mapContainer.value, {
       viewMode: '2D',
-      zoom: 11,
+      zoom: 12.6,
       center: [116.497, 39.944], // 北京朝阳区中心
       mapStyle: 'amap://styles/light',
       resizeEnable: true
