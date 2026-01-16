@@ -1108,20 +1108,20 @@ watch(() => appStore.visibleLayers.includes('route'), (visible) => {
       </div>
     </div>
 
-    <!-- 图例 - 移动端底部居中，桌面端右下角 -->
-    <div class="absolute bottom-28 left-1/2 -translate-x-1/2 lg:bottom-6 lg:left-auto lg:right-[416px] lg:translate-x-0 bg-surface/95 backdrop-blur-sm px-3 py-2 lg:px-4 lg:py-3 rounded-xl shadow-card border border-border-light">
-      <div class="flex items-center gap-2 lg:gap-4 text-xs">
+    <!-- 图例 - 移动端底部左侧留出按钮空间，桌面端右下角 -->
+    <div class="absolute bottom-32 left-4 right-24 lg:bottom-6 lg:left-auto lg:right-[416px] bg-surface/95 backdrop-blur-sm px-3 py-2 lg:px-4 lg:py-3 rounded-xl shadow-card border border-border-light">
+      <div class="flex flex-nowrap items-center gap-3 lg:gap-4 text-xs leading-none whitespace-nowrap">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-status-success"></span>
-          <span class="text-text-secondary">准时率 ≥90%</span>
+          <span class="text-text-secondary leading-none">准时率 ≥90%</span>
         </div>
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-status-warning"></span>
-          <span class="text-text-secondary">85-90%</span>
+          <span class="text-text-secondary leading-none">85-90%</span>
         </div>
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-status-danger"></span>
-          <span class="text-text-secondary">&lt;85%</span>
+          <span class="text-text-secondary leading-none">&lt;85%</span>
         </div>
       </div>
     </div>
