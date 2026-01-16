@@ -284,10 +284,10 @@ watch(() => appStore.currentStoreId, (storeId) => {
       </div>
     </div>
 
-    <!-- 地图标题卡片 -->
-    <div class="absolute top-4 left-4 bg-surface/95 backdrop-blur-sm px-5 py-3 rounded-xl shadow-panel border border-border-light">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-lg bg-jd-red flex items-center justify-center">
+    <!-- 地图标题卡片 - 移动端简化 -->
+    <div class="absolute top-3 left-3 lg:top-4 lg:left-4 bg-surface/95 backdrop-blur-sm px-3 py-2 lg:px-5 lg:py-3 rounded-xl shadow-panel border border-border-light">
+      <div class="flex items-center gap-2 lg:gap-3">
+        <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-jd-red flex items-center justify-center">
           <svg class="w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
           </svg>
@@ -299,9 +299,9 @@ watch(() => appStore.currentStoreId, (storeId) => {
       </div>
     </div>
 
-    <!-- 图例 -->
-    <div class="absolute bottom-6 right-[416px] bg-surface/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-card border border-border-light">
-      <div class="flex items-center gap-4 text-xs">
+    <!-- 图例 - 移动端底部居中，桌面端右下角 -->
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 lg:bottom-6 lg:left-auto lg:right-[416px] lg:translate-x-0 bg-surface/95 backdrop-blur-sm px-3 py-2 lg:px-4 lg:py-3 rounded-xl shadow-card border border-border-light">
+      <div class="flex items-center gap-2 lg:gap-4 text-xs">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-status-success"></span>
           <span class="text-text-secondary">准时率 ≥90%</span>
