@@ -8,15 +8,19 @@ import { STORES } from '@/data/stores'
  * 1. 大部分区域是中低密度，颜色有明显变化
  * 2. 少数热点区域呈现橙红色
  * 3. 热点分布随机，形状自然不规则
+ * @param storeId 可选的门店ID，传入时只生成该门店的热力图数据，不传则生成所有门店
  */
-export function generateHeatmapData(): { lng: number; lat: number; count: number }[] {
-  const points: { lng: number; lat: number; count: number }[] = []
+export function generateHeatmapData(storeId?: number | null): { lng: number; lat: number; count: number; storeId: number }[] {
+  const points: { lng: number; lat: number; count: number; storeId: number }[] = []
   
   // 使用固定种子让热点位置稳定
   const seed = 42
   const seededRandom = createSeededRandom(seed)
   
-  for (const store of STORES) {
+  // 根据 storeId 筛选门店
+  const targetStores = storeId ? STORES.filter(s => s.id === storeId) : STORES
+  
+  for (const store of targetStores) {
     const orderCount = store.daily_orders || 300
     
     // 1. 背景层：稀疏的低密度点（40%）- 蓝色区域
@@ -29,7 +33,8 @@ export function generateHeatmapData(): { lng: number; lat: number; count: number
       points.push({
         lng: store.lon + (distance * Math.sin(angle) + noise) / 85,
         lat: store.lat + (distance * Math.cos(angle) + noise) / 111,
-        count: 1 + Math.floor(Math.random() * 2)  // 权重1-2
+        count: 1 + Math.floor(Math.random() * 2),  // 权重1-2
+        storeId: store.id
       })
     }
     
@@ -43,7 +48,8 @@ export function generateHeatmapData(): { lng: number; lat: number; count: number
       points.push({
         lng: store.lon + (distance * Math.sin(angle) + noise) / 85,
         lat: store.lat + (distance * Math.cos(angle) + noise) / 111,
-        count: 3 + Math.floor(Math.random() * 4)  // 权重3-6
+        count: 3 + Math.floor(Math.random() * 4),  // 权重3-6
+        storeId: store.id
       })
     }
     
@@ -57,7 +63,8 @@ export function generateHeatmapData(): { lng: number; lat: number; count: number
       points.push({
         lng: store.lon + (distance * Math.sin(angle) + noise) / 85,
         lat: store.lat + (distance * Math.cos(angle) + noise) / 111,
-        count: 6 + Math.floor(Math.random() * 5)  // 权重6-10
+        count: 6 + Math.floor(Math.random() * 5),  // 权重6-10
+        storeId: store.id
       })
     }
     
@@ -92,7 +99,8 @@ export function generateHeatmapData(): { lng: number; lat: number; count: number
           points.push({
             lng: hotspotLon + rotatedDx / 85 + noise / 85,
             lat: hotspotLat + rotatedDy / 111 + noise / 111,
-            count: 8 + Math.floor(Math.random() * 6)  // 权重8-13
+            count: 8 + Math.floor(Math.random() * 6),  // 权重8-13
+            storeId: store.id
           })
         }
         
@@ -109,7 +117,8 @@ export function generateHeatmapData(): { lng: number; lat: number; count: number
           points.push({
             lng: hotspotLon + rotatedDx / 85,
             lat: hotspotLat + rotatedDy / 111,
-            count: 14 + Math.floor(Math.random() * 8)  // 权重14-21
+            count: 14 + Math.floor(Math.random() * 8),  // 权重14-21
+            storeId: store.id
           })
         }
         
@@ -120,7 +129,8 @@ export function generateHeatmapData(): { lng: number; lat: number; count: number
           points.push({
             lng: hotspotLon + (microR * Math.cos(microTheta)) / 85,
             lat: hotspotLat + (microR * Math.sin(microTheta)) / 111,
-            count: 20 + Math.floor(Math.random() * 10)  // 权重20-29
+            count: 20 + Math.floor(Math.random() * 10),  // 权重20-29
+            storeId: store.id
           })
         }
       }

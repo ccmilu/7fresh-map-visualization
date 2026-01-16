@@ -23,7 +23,7 @@ const serviceAreaPolygons: any[] = []
 
 // 热力图相关
 let heatmapLayer: any = null
-let heatmapData: { lng: number; lat: number; count: number }[] = []
+let allHeatmapData: { lng: number; lat: number; count: number; storeId: number }[] = []
 
 // 超时订单相关
 const timeoutMarkers: any[] = []
@@ -61,7 +61,7 @@ async function initMap() {
     mapInstance.addControl(new AMap.ToolBar({ position: 'LT' }))
 
     // 生成数据
-    heatmapData = generateHeatmapData()
+    allHeatmapData = generateHeatmapData()
     timeoutOrders = getAllTimeoutOrders()
     timeoutClusters = identifyTimeoutClusters(timeoutOrders)
     
@@ -286,20 +286,6 @@ const getOnTimeColor = (rate: number) => {
   return '#EF4444'
 }
 
-// 获取准时率对应的背景色（用于标记点）
-const getOnTimeBgColor = (rate: number) => {
-  if (rate >= 90) return '#DCFCE7' // 浅绿
-  if (rate >= 85) return '#FEF3C7' // 浅黄
-  return '#FEE2E2' // 浅红
-}
-
-// 获取准时率对应的边框色
-const getOnTimeBorderColor = (rate: number) => {
-  if (rate >= 90) return '#86EFAC'
-  if (rate >= 85) return '#FCD34D'
-  return '#FCA5A5'
-}
-
 // 显示门店信息窗口
 function showStoreInfo(store: typeof STORES[0]) {
   if (!AMap || !mapInstance) return
@@ -386,6 +372,27 @@ function showStoreInfo(store: typeof STORES[0]) {
 
 // ==================== 热力图相关 ====================
 
+// 更新热力图数据（根据门店筛选）
+function updateHeatmapData() {
+  if (!heatmapLayer) return
+  
+  const storeId = appStore.heatmapStoreId
+  let filteredData: { lng: number; lat: number; count: number }[]
+  
+  if (storeId === null) {
+    // 显示所有门店
+    filteredData = allHeatmapData
+  } else {
+    // 筛选特定门店
+    filteredData = allHeatmapData.filter(p => p.storeId === storeId)
+  }
+  
+  heatmapLayer.setDataSet({
+    data: filteredData,
+    max: 15
+  })
+}
+
 // 添加热力图图层
 async function addHeatmapLayer() {
   if (!AMap || !mapInstance) return
@@ -413,11 +420,8 @@ async function addHeatmapLayer() {
       zIndex: 20
     })
     
-    // 设置数据 - 降低max值让颜色分布更明显
-    heatmapLayer.setDataSet({
-      data: heatmapData,
-      max: 15 // 降低最大值，让中等权重也能显示明显颜色
-    })
+    // 设置数据 - 根据当前选中的门店筛选
+    updateHeatmapData()
     
     // 根据初始图层状态显示/隐藏
     if (!appStore.visibleLayers.includes('heatmap')) {
@@ -703,6 +707,11 @@ watch(() => appStore.visibleLayers, (layers) => {
   timeoutClusterCircles.forEach(c => showTimeout ? c.show() : c.hide())
   
 }, { deep: true })
+
+// 监听热力图门店筛选变化
+watch(() => appStore.heatmapStoreId, () => {
+  updateHeatmapData()
+})
 </script>
 
 <template>

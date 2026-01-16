@@ -8,6 +8,7 @@ export const useAppStore = defineStore('app', () => {
   const currentStoreId = ref<number | null>(null)
   const visibleLayers = ref<LayerType[]>(['stores', 'serviceArea', 'heatmap', 'timeout'])
   const selectedTripId = ref<string | null>(null)
+  const heatmapStoreId = ref<number | null>(null) // null 表示显示所有门店热力图
 
   // 计算属性
   const currentStore = computed<Store | null>(() => {
@@ -28,10 +29,6 @@ export const useAppStore = defineStore('app', () => {
     const index = visibleLayers.value.indexOf(layer)
     if (index > -1) {
       visibleLayers.value.splice(index, 1)
-      // 联动规则：关闭服务范围时自动关闭热力图
-      if (layer === 'serviceArea' && visibleLayers.value.includes('heatmap')) {
-        visibleLayers.value.splice(visibleLayers.value.indexOf('heatmap'), 1)
-      }
     } else {
       // 打开路径分析时关闭其他图层
       if (layer === 'route') {
@@ -62,6 +59,12 @@ export const useAppStore = defineStore('app', () => {
     currentStoreId.value = null
     visibleLayers.value = ['stores', 'serviceArea', 'heatmap', 'timeout']
     selectedTripId.value = null
+    heatmapStoreId.value = null
+  }
+
+  // 设置热力图显示的门店
+  const setHeatmapStore = (storeId: number | null) => {
+    heatmapStoreId.value = storeId
   }
 
   return {
@@ -69,6 +72,7 @@ export const useAppStore = defineStore('app', () => {
     currentStoreId,
     visibleLayers,
     selectedTripId,
+    heatmapStoreId,
     // 计算属性
     currentStore,
     isLayerVisible,
@@ -77,6 +81,7 @@ export const useAppStore = defineStore('app', () => {
     toggleLayer,
     setLayer,
     selectTrip,
-    resetState
+    resetState,
+    setHeatmapStore
   }
 })

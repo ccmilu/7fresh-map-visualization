@@ -62,6 +62,13 @@ function getInsightIconColor(type: string): string {
     default: return 'text-text-secondary'
   }
 }
+
+// 热力图门店筛选变化
+function onHeatmapStoreChange(event: Event) {
+  const target = event.target as HTMLSelectElement
+  const value = target.value
+  appStore.setHeatmapStore(value === 'all' ? null : Number(value))
+}
 </script>
 
 <template>
@@ -120,24 +127,40 @@ function getInsightIconColor(type: string): string {
       <section class="p-4 border-t border-border-light">
         <h3 class="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">图层控制</h3>
         <div class="space-y-1">
-          <label
-            v-for="layer in layerConfig"
-            :key="layer.key"
-            class="flex items-center cursor-pointer hover:bg-surface-secondary rounded-lg px-3 py-2.5 transition-colors"
-          >
-            <div class="relative">
-              <input
-                type="checkbox"
-                :checked="appStore.visibleLayers.includes(layer.key)"
-                @change="appStore.toggleLayer(layer.key)"
-                class="peer sr-only"
-              />
-              <div class="w-9 h-5 bg-gray-200 peer-checked:bg-jd-red rounded-full transition-colors"></div>
-              <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform peer-checked:translate-x-4"></div>
+          <template v-for="layer in layerConfig" :key="layer.key">
+            <label
+              class="flex items-center cursor-pointer hover:bg-surface-secondary rounded-lg px-3 py-2.5 transition-colors"
+            >
+              <div class="relative">
+                <input
+                  type="checkbox"
+                  :checked="appStore.visibleLayers.includes(layer.key)"
+                  @change="appStore.toggleLayer(layer.key)"
+                  class="peer sr-only"
+                />
+                <div class="w-9 h-5 bg-gray-200 peer-checked:bg-jd-red rounded-full transition-colors"></div>
+                <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform peer-checked:translate-x-4"></div>
+              </div>
+              <Icon :name="(layer.icon)" class="ml-3 w-4 h-4 text-text-secondary" />
+              <span class="ml-2 text-sm text-text-primary">{{ layer.label }}</span>
+            </label>
+            <!-- 热力图门店筛选 -->
+            <div
+              v-if="layer.key === 'heatmap' && appStore.visibleLayers.includes('heatmap')"
+              class="ml-12 mt-1 mb-2"
+            >
+              <select
+                :value="appStore.heatmapStoreId ?? 'all'"
+                @change="onHeatmapStoreChange($event)"
+                class="w-full px-3 py-2 text-sm bg-surface-secondary border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-jd-red/20 focus:border-jd-red transition-colors"
+              >
+                <option value="all">全部门店</option>
+                <option v-for="store in STORES" :key="store.id" :value="store.id">
+                  {{ store.name.replace('七鲜超市(', '').replace('京东七鲜(', '').replace(')', '') }}
+                </option>
+              </select>
             </div>
-            <Icon :name="(layer.icon)" class="ml-3 w-4 h-4 text-text-secondary" />
-            <span class="ml-2 text-sm text-text-primary">{{ layer.label }}</span>
-          </label>
+          </template>
         </div>
       </section>
 
