@@ -4,14 +4,14 @@ import Sidebar from './components/Sidebar.vue'
 </script>
 
 <template>
-  <div class="app-container flex h-screen w-screen overflow-hidden bg-gray-100">
+  <div class="app-container flex h-screen w-screen overflow-hidden bg-surface-secondary">
     <!-- 地图区域 -->
     <div class="map-area flex-1 relative">
       <MapContainer />
     </div>
     
     <!-- 侧边栏 -->
-    <div class="sidebar-area w-[380px] flex-shrink-0">
+    <div class="sidebar-area w-[400px] flex-shrink-0 shadow-panel">
       <Sidebar />
     </div>
   </div>
