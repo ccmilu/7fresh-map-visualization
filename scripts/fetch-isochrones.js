@@ -1,5 +1,5 @@
 /**
- * 下载门店16分钟骑行等时圈数据
+ * 下载门店30分钟骑行等时圈数据
  * 调用 HeiGIT OpenRouteService API
  */
 
@@ -26,7 +26,7 @@ const STORES = [
 async function fetchIsochrone(store) {
   const body = {
     locations: [[store.lon, store.lat]],
-    range: [960], // 16分钟 = 960秒
+    range: [1800], // 30分钟 = 1800秒
     range_type: 'time',
     attributes: ['area', 'reachfactor']
   }
@@ -74,8 +74,8 @@ async function main() {
   // 输出JSON结果
   const output = {
     generated_at: new Date().toISOString(),
-    description: '16分钟骑行等时圈数据 (OpenRouteService)',
-    range_seconds: 960,
+    description: '30分钟骑行等时圈数据 (OpenRouteService)',
+    range_seconds: 1800,
     profile: 'cycling-regular',
     stores: results
   }
