@@ -2,8 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { STORES } from '@/data/stores'
-import { generateVoronoiAreas, toAMapPath } from '@/utils/voronoi'
-import { generateHeatmapData, getAllTimeoutOrders, identifyTimeoutClusters } from '@/utils/mockData'
+import serviceAreasData from '@/data/serviceAreas.json'
 
 const appStore = useAppStore()
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -14,17 +13,11 @@ const mapError = ref<string | null>(null)
 let mapInstance: any = null
 let AMap: any = null
 
-// 覆盖物引用
+// 门店标记点
 const storeMarkers: any[] = []
-const voronoiPolygons: any[] = []
-let heatmapLayer: any = null
-const timeoutMarkers: any[] = []
-const clusterCircles: any[] = []
 
-// 预生成数据（避免重复计算）
-const heatmapData = generateHeatmapData()
-const timeoutOrders = getAllTimeoutOrders()
-const timeoutClusters = identifyTimeoutClusters(timeoutOrders)
+// 服务范围多边形
+const serviceAreaPolygons: any[] = []
 
 onMounted(async () => {
   await initMap()
@@ -55,11 +48,11 @@ async function initMap() {
     mapInstance.addControl(new AMap.Scale())
     mapInstance.addControl(new AMap.ToolBar({ position: 'LT' }))
 
-    // 添加图层
+    // 添加服务范围多边形（先绘制，在底层）
+    addServiceAreas()
+    
+    // 添加门店标记
     addStoreMarkers()
-    addVoronoiLayer()
-    addHeatmapLayer()
-    addTimeoutLayer()
 
     mapLoading.value = false
   } catch (error) {
@@ -71,6 +64,129 @@ async function initMap() {
 
 // 门店图标 SVG
 const storeIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/></svg>`
+
+// 添加服务范围多边形
+function addServiceAreas() {
+  if (!AMap || !mapInstance) return
+  
+  // 清除现有多边形
+  serviceAreaPolygons.forEach(p => mapInstance.remove(p))
+  serviceAreaPolygons.length = 0
+  
+  // 绘制每个门店的服务范围
+  serviceAreasData.areas.forEach((area: any) => {
+    // 转换坐标格式 [{lon, lat}] -> [[lon, lat]]
+    const path = area.polygon.map((p: any) => [p.lon, p.lat])
+    
+    if (path.length < 3) return
+    
+    const polygon = new AMap.Polygon({
+      path: path,
+      fillColor: area.color,
+      fillOpacity: 0.15,
+      strokeColor: area.color,
+      strokeWeight: 2,
+      strokeOpacity: 0.8,
+      strokeStyle: 'solid',
+      zIndex: 10
+    })
+    
+    // 悬停效果
+    polygon.on('mouseover', () => {
+      polygon.setOptions({
+        fillOpacity: 0.3,
+        strokeWeight: 3
+      })
+    })
+    
+    polygon.on('mouseout', () => {
+      polygon.setOptions({
+        fillOpacity: 0.15,
+        strokeWeight: 2
+      })
+    })
+    
+    // 点击显示信息
+    polygon.on('click', () => {
+      const store = STORES.find(s => s.id === area.store_id)
+      if (store) {
+        showServiceAreaInfo(area, store)
+      }
+    })
+    
+    serviceAreaPolygons.push(polygon)
+    mapInstance.add(polygon)
+  })
+}
+
+// 显示服务范围信息
+function showServiceAreaInfo(area: any, store: typeof STORES[0]) {
+  if (!AMap || !mapInstance) return
+  
+  const infoContent = `
+    <div style="
+      padding: 14px;
+      min-width: 220px;
+      font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    ">
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #F1F5F9;
+      ">
+        <div style="
+          width: 12px;
+          height: 12px;
+          background: ${area.color};
+          border-radius: 3px;
+        "></div>
+        <span style="font-size: 13px; font-weight: 600; color: #0F172A;">
+          ${store.name.replace('七鲜超市(', '').replace('京东七鲜(', '').replace(')', '')}
+        </span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">覆盖面积</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${area.area_sqkm} km²</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">日均单量</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${area.daily_orders} 单</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">订单密度</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${(area.daily_orders / area.area_sqkm).toFixed(1)} 单/km²</span>
+        </div>
+      </div>
+    </div>
+  `
+  
+  // 计算多边形中心点
+  const center = calculatePolygonCenter(area.polygon)
+  
+  const infoWindow = new AMap.InfoWindow({
+    content: infoContent,
+    offset: new AMap.Pixel(0, 0)
+  })
+  
+  infoWindow.open(mapInstance, center)
+}
+
+// 计算多边形中心点
+function calculatePolygonCenter(polygon: Array<{lon: number, lat: number}>): [number, number] {
+  let sumLon = 0, sumLat = 0
+  const n = polygon.length
+  
+  for (const p of polygon) {
+    sumLon += p.lon
+    sumLat += p.lat
+  }
+  
+  return [sumLon / n, sumLat / n]
+}
 
 // 添加门店标记点
 function addStoreMarkers() {
@@ -250,225 +366,6 @@ function showStoreInfo(store: typeof STORES[0]) {
   infoWindow.open(mapInstance, [store.lon, store.lat])
 }
 
-// ============== 泰森多边形图层 ==============
-const VORONOI_COLORS = [
-  { fill: '#3B82F6', stroke: '#2563EB' },  // 蓝
-  { fill: '#10B981', stroke: '#059669' },  // 绿
-  { fill: '#F59E0B', stroke: '#D97706' },  // 黄
-  { fill: '#EF4444', stroke: '#DC2626' },  // 红
-  { fill: '#8B5CF6', stroke: '#7C3AED' },  // 紫
-  { fill: '#EC4899', stroke: '#DB2777' }   // 粉
-]
-
-function addVoronoiLayer() {
-  if (!AMap || !mapInstance) return
-  
-  // 清除现有多边形
-  voronoiPolygons.forEach(p => mapInstance.remove(p))
-  voronoiPolygons.length = 0
-  
-  // 生成泰森多边形
-  const areas = generateVoronoiAreas(STORES)
-  
-  areas.forEach((area, index) => {
-    const store = STORES.find(s => s.id === area.store_id)
-    const color = VORONOI_COLORS[index % VORONOI_COLORS.length]!
-    
-    const polygon = new AMap.Polygon({
-      path: toAMapPath(area.polygon),
-      fillColor: color.fill,
-      fillOpacity: 0.15,
-      strokeColor: color.stroke,
-      strokeWeight: 2,
-      strokeOpacity: 0.8,
-      strokeStyle: 'solid'
-    })
-    
-    // 添加点击事件
-    polygon.on('click', () => {
-      if (store) {
-        appStore.selectStore(store.id)
-        showStoreInfo(store)
-      }
-    })
-    
-    // 鼠标悬停高亮
-    polygon.on('mouseover', () => {
-      polygon.setOptions({ fillOpacity: 0.3 })
-    })
-    polygon.on('mouseout', () => {
-      polygon.setOptions({ fillOpacity: 0.15 })
-    })
-    
-    voronoiPolygons.push(polygon)
-  })
-  
-  // 根据初始可见性添加到地图
-  if (appStore.visibleLayers.includes('serviceArea')) {
-    voronoiPolygons.forEach(p => mapInstance.add(p))
-  }
-}
-
-// ============== 热力图图层 ==============
-function addHeatmapLayer() {
-  if (!AMap || !mapInstance) return
-  
-  // 创建热力图实例
-  mapInstance.plugin(['AMap.HeatMap'], () => {
-    heatmapLayer = new AMap.HeatMap(mapInstance, {
-      radius: 25,
-      opacity: [0, 0.8],
-      gradient: {
-        0.4: '#2563EB',
-        0.6: '#10B981', 
-        0.8: '#F59E0B',
-        1.0: '#EF4444'
-      }
-    })
-    
-    // 设置数据
-    heatmapLayer.setDataSet({
-      data: heatmapData,
-      max: 10
-    })
-    
-    // 根据初始可见性显示
-    if (appStore.visibleLayers.includes('heatmap')) {
-      heatmapLayer.show()
-    } else {
-      heatmapLayer.hide()
-    }
-  })
-}
-
-// ============== 超时订单图层 ==============
-function addTimeoutLayer() {
-  if (!AMap || !mapInstance) return
-  
-  // 清除现有标记
-  timeoutMarkers.forEach(m => mapInstance.remove(m))
-  timeoutMarkers.length = 0
-  clusterCircles.forEach(c => mapInstance.remove(c))
-  clusterCircles.length = 0
-  
-  // 超时订单小红点
-  timeoutOrders.forEach(order => {
-    const marker = new AMap.CircleMarker({
-      center: [order.lon, order.lat],
-      radius: 4,
-      fillColor: '#EF4444',
-      fillOpacity: 0.7,
-      strokeColor: '#DC2626',
-      strokeWeight: 1
-    })
-    
-    marker.on('click', () => {
-      const infoContent = `
-        <div style="padding: 12px; min-width: 180px; font-family: system-ui, sans-serif;">
-          <div style="font-weight: 600; color: #EF4444; margin-bottom: 8px;">⚠️ 超时订单</div>
-          <div style="font-size: 12px; color: #64748B;">
-            <p style="margin: 4px 0;">配送时长: <span style="color: #0F172A; font-weight: 500;">${order.duration}分钟</span></p>
-            <p style="margin: 4px 0;">超时: <span style="color: #EF4444; font-weight: 500;">${order.timeout_duration}分钟</span></p>
-            <p style="margin: 4px 0;">原因: <span style="color: #0F172A;">${order.reason}</span></p>
-          </div>
-        </div>
-      `
-      const infoWindow = new AMap.InfoWindow({
-        content: infoContent,
-        offset: new AMap.Pixel(0, -10)
-      })
-      infoWindow.open(mapInstance, [order.lon, order.lat])
-    })
-    
-    timeoutMarkers.push(marker)
-  })
-  
-  // 聚集区域圆圈
-  timeoutClusters.forEach(cluster => {
-    const circle = new AMap.Circle({
-      center: [cluster.center.lon, cluster.center.lat],
-      radius: cluster.radius,
-      fillColor: '#EF4444',
-      fillOpacity: 0.15,
-      strokeColor: '#EF4444',
-      strokeWeight: 2,
-      strokeStyle: 'dashed'
-    })
-    
-    // 添加聚集区域标签
-    const label = new AMap.Marker({
-      position: [cluster.center.lon, cluster.center.lat],
-      content: `<div style="
-        background: #FEF2F2;
-        border: 1px solid #FECACA;
-        color: #EF4444;
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 11px;
-        font-weight: 600;
-        white-space: nowrap;
-      ">⚠️ ${cluster.count}单超时</div>`,
-      offset: new AMap.Pixel(-40, -12)
-    })
-    
-    clusterCircles.push(circle, label)
-  })
-  
-  // 根据初始可见性添加到地图
-  if (appStore.visibleLayers.includes('timeout')) {
-    timeoutMarkers.forEach(m => mapInstance.add(m))
-    clusterCircles.forEach(c => mapInstance.add(c))
-  }
-}
-
-// ============== 图层可见性监听 ==============
-watch(() => appStore.visibleLayers, (layers) => {
-  if (!mapInstance) return
-  
-  // 门店标记
-  storeMarkers.forEach(m => {
-    if (layers.includes('stores')) {
-      mapInstance.add(m)
-    } else {
-      mapInstance.remove(m)
-    }
-  })
-  
-  // 泰森多边形
-  voronoiPolygons.forEach(p => {
-    if (layers.includes('serviceArea')) {
-      mapInstance.add(p)
-    } else {
-      mapInstance.remove(p)
-    }
-  })
-  
-  // 热力图
-  if (heatmapLayer) {
-    if (layers.includes('heatmap')) {
-      heatmapLayer.show()
-    } else {
-      heatmapLayer.hide()
-    }
-  }
-  
-  // 超时订单
-  timeoutMarkers.forEach(m => {
-    if (layers.includes('timeout')) {
-      mapInstance.add(m)
-    } else {
-      mapInstance.remove(m)
-    }
-  })
-  clusterCircles.forEach(c => {
-    if (layers.includes('timeout')) {
-      mapInstance.add(c)
-    } else {
-      mapInstance.remove(c)
-    }
-  })
-}, { deep: true })
-
 // 监听当前选中门店变化
 watch(() => appStore.currentStoreId, (storeId) => {
   if (!mapInstance || !storeId) return
@@ -480,6 +377,24 @@ watch(() => appStore.currentStoreId, (storeId) => {
     showStoreInfo(store)
   }
 })
+
+// 监听服务范围图层可见性变化
+watch(() => appStore.visibleLayers, (layers) => {
+  if (!mapInstance) return
+  
+  const showServiceArea = layers.includes('serviceArea')
+  
+  if (showServiceArea && serviceAreaPolygons.length === 0) {
+    // 图层打开且多边形未绘制，添加多边形
+    addServiceAreas()
+  } else if (!showServiceArea && serviceAreaPolygons.length > 0) {
+    // 图层关闭，隐藏多边形
+    serviceAreaPolygons.forEach(p => p.hide())
+  } else if (showServiceArea && serviceAreaPolygons.length > 0) {
+    // 图层打开，显示多边形
+    serviceAreaPolygons.forEach(p => p.show())
+  }
+}, { deep: true })
 </script>
 
 <template>
