@@ -14,8 +14,8 @@ export const STORES: Store[] = [
   {
     id: 2,
     name: '七鲜超市(青年西路店)',
-    lat: 39.975499,
-    lon: 116.498254,
+    lat: 39.916644,
+    lon: 116.515234,
     daily_orders: 450,
     on_time_rate: 0.92,
     avg_delivery_time: 21,
@@ -34,8 +34,8 @@ export const STORES: Store[] = [
   {
     id: 4,
     name: '京东七鲜(东土城路店)',
-    lat: 39.847554,
-    lon: 116.320283,
+    lat: 39.954024,
+    lon: 116.433021,
     daily_orders: 290,
     on_time_rate: 0.85,
     avg_delivery_time: 26,
@@ -44,8 +44,8 @@ export const STORES: Store[] = [
   {
     id: 5,
     name: '七鲜超市(酒仙桥中路店)',
-    lat: 39.985123,
-    lon: 116.512456,
+    lat: 39.975499,
+    lon: 116.498254,
     daily_orders: 410,
     on_time_rate: 0.91,
     avg_delivery_time: 22,
