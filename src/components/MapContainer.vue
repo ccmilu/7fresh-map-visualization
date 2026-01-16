@@ -3,6 +3,8 @@ import { ref, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { STORES } from '@/data/stores'
 import serviceAreasData from '@/data/serviceAreas.json'
+import { generateHeatmapData, getAllTimeoutOrders, identifyTimeoutClusters } from '@/utils/mockData'
+import type { TimeoutOrder } from '@/types'
 
 const appStore = useAppStore()
 const mapContainer = ref<HTMLDivElement | null>(null)
@@ -18,6 +20,16 @@ const storeMarkers: any[] = []
 
 // 服务范围多边形
 const serviceAreaPolygons: any[] = []
+
+// 热力图相关
+let heatmapLayer: any = null
+let heatmapData: { lng: number; lat: number; count: number }[] = []
+
+// 超时订单相关
+const timeoutMarkers: any[] = []
+const timeoutClusterCircles: any[] = []
+let timeoutOrders: TimeoutOrder[] = []
+let timeoutClusters: { center: { lat: number; lon: number }; count: number; radius: number }[] = []
 
 onMounted(async () => {
   await initMap()
@@ -48,8 +60,20 @@ async function initMap() {
     mapInstance.addControl(new AMap.Scale())
     mapInstance.addControl(new AMap.ToolBar({ position: 'LT' }))
 
+    // 生成数据
+    heatmapData = generateHeatmapData()
+    timeoutOrders = getAllTimeoutOrders()
+    timeoutClusters = identifyTimeoutClusters(timeoutOrders)
+    
     // 添加服务范围多边形（先绘制，在底层）
     addServiceAreas()
+    
+    // 添加热力图（在服务范围上层）
+    addHeatmapLayer()
+    
+    // 添加超时订单标记和聚集区域
+    addTimeoutMarkers()
+    addTimeoutClusters()
     
     // 添加门店标记
     addStoreMarkers()
@@ -366,6 +390,285 @@ function showStoreInfo(store: typeof STORES[0]) {
   infoWindow.open(mapInstance, [store.lon, store.lat])
 }
 
+// ==================== 热力图相关 ====================
+
+// 添加热力图图层
+async function addHeatmapLayer() {
+  if (!AMap || !mapInstance) return
+  
+  try {
+    // 动态加载热力图插件
+    await new Promise<void>((resolve, reject) => {
+      AMap.plugin('AMap.HeatMap', () => {
+        resolve()
+      })
+    })
+    
+    // 创建热力图实例
+    heatmapLayer = new AMap.HeatMap(mapInstance, {
+      radius: 28, // 热力点半径稍大
+      opacity: [0, 0.85], // 透明度更高
+      gradient: {
+        0.2: '#3B82F6',  // 蓝色（低密度）
+        0.4: '#10B981',  // 绿色
+        0.6: '#FBBF24',  // 黄色（中密度）
+        0.8: '#F97316',  // 橙色
+        1.0: '#EF4444'   // 红色（高密度）
+      },
+      zooms: [3, 18],
+      zIndex: 20
+    })
+    
+    // 设置数据 - 降低max值让颜色分布更明显
+    heatmapLayer.setDataSet({
+      data: heatmapData,
+      max: 15 // 降低最大值，让中等权重也能显示明显颜色
+    })
+    
+    // 根据初始图层状态显示/隐藏
+    if (!appStore.visibleLayers.includes('heatmap')) {
+      heatmapLayer.hide()
+    }
+  } catch (error) {
+    console.error('热力图加载失败:', error)
+  }
+}
+
+// ==================== 超时订单相关 ====================
+
+// 添加超时订单标记点
+function addTimeoutMarkers() {
+  if (!AMap || !mapInstance) return
+  
+  // 清除现有标记
+  timeoutMarkers.forEach(m => mapInstance.remove(m))
+  timeoutMarkers.length = 0
+  
+  for (const order of timeoutOrders) {
+    // 创建红色圆点标记
+    const markerContent = `
+      <div class="timeout-marker" style="
+        width: 12px;
+        height: 12px;
+        background: #EF4444;
+        border: 2px solid #FCA5A5;
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+        animation: pulse 2s infinite;
+      "></div>
+    `
+    
+    const marker = new AMap.Marker({
+      position: [order.lon, order.lat],
+      content: markerContent,
+      offset: new AMap.Pixel(-6, -6),
+      zIndex: 30,
+      extData: order
+    })
+    
+    // 点击显示超时详情
+    marker.on('click', () => {
+      showTimeoutOrderInfo(order)
+    })
+    
+    timeoutMarkers.push(marker)
+    mapInstance.add(marker)
+  }
+  
+  // 根据初始图层状态显示/隐藏
+  if (!appStore.visibleLayers.includes('timeout')) {
+    timeoutMarkers.forEach(m => m.hide())
+  }
+}
+
+// 显示超时订单信息
+function showTimeoutOrderInfo(order: TimeoutOrder) {
+  if (!AMap || !mapInstance) return
+  
+  const infoContent = `
+    <div style="
+      padding: 14px;
+      min-width: 200px;
+      font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    ">
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #FEE2E2;
+      ">
+        <div style="
+          width: 28px;
+          height: 28px;
+          background: #FEF2F2;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/>
+          </svg>
+        </div>
+        <span style="font-size: 13px; font-weight: 600; color: #EF4444;">超时订单</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">配送时长</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${order.duration} 分钟</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">超时时长</span>
+          <span style="font-size: 14px; font-weight: 600; color: #EF4444;">+${order.timeout_duration} 分钟</span>
+        </div>
+        <div style="
+          margin-top: 4px;
+          padding: 8px 10px;
+          background: #FEF2F2;
+          border-radius: 6px;
+          border: 1px solid #FECACA;
+        ">
+          <div style="font-size: 11px; color: #94A3B8; margin-bottom: 2px;">超时原因</div>
+          <div style="font-size: 12px; color: #EF4444; font-weight: 500;">${order.reason}</div>
+        </div>
+      </div>
+    </div>
+  `
+  
+  const infoWindow = new AMap.InfoWindow({
+    content: infoContent,
+    offset: new AMap.Pixel(0, -10)
+  })
+  
+  infoWindow.open(mapInstance, [order.lon, order.lat])
+}
+
+// 添加超时订单聚集区域
+function addTimeoutClusters() {
+  if (!AMap || !mapInstance) return
+  
+  // 清除现有聚集区域
+  timeoutClusterCircles.forEach(c => mapInstance.remove(c))
+  timeoutClusterCircles.length = 0
+  
+  for (const cluster of timeoutClusters) {
+    // 创建半透明红色圆形区域
+    const circle = new AMap.Circle({
+      center: [cluster.center.lon, cluster.center.lat],
+      radius: cluster.radius, // 半径（米）
+      fillColor: '#EF4444',
+      fillOpacity: 0.15,
+      strokeColor: '#EF4444',
+      strokeWeight: 2,
+      strokeOpacity: 0.6,
+      strokeStyle: 'dashed',
+      zIndex: 25
+    })
+    
+    // 悬停效果
+    circle.on('mouseover', () => {
+      circle.setOptions({
+        fillOpacity: 0.25,
+        strokeWeight: 3
+      })
+    })
+    
+    circle.on('mouseout', () => {
+      circle.setOptions({
+        fillOpacity: 0.15,
+        strokeWeight: 2
+      })
+    })
+    
+    // 点击显示聚集区域信息
+    circle.on('click', () => {
+      showClusterInfo(cluster)
+    })
+    
+    timeoutClusterCircles.push(circle)
+    mapInstance.add(circle)
+  }
+  
+  // 根据初始图层状态显示/隐藏
+  if (!appStore.visibleLayers.includes('timeout')) {
+    timeoutClusterCircles.forEach(c => c.hide())
+  }
+}
+
+// 显示聚集区域信息
+function showClusterInfo(cluster: { center: { lat: number; lon: number }; count: number; radius: number }) {
+  if (!AMap || !mapInstance) return
+  
+  const infoContent = `
+    <div style="
+      padding: 14px;
+      min-width: 220px;
+      font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    ">
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #FEE2E2;
+      ">
+        <div style="
+          width: 28px;
+          height: 28px;
+          background: #EF4444;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <span style="font-size: 13px; font-weight: 600; color: #EF4444;">配送黑洞区域</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">超时订单数</span>
+          <span style="font-size: 14px; font-weight: 600; color: #EF4444;">${cluster.count} 单</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 12px; color: #64748B;">影响半径</span>
+          <span style="font-size: 14px; font-weight: 600; color: #0F172A;">${cluster.radius} 米</span>
+        </div>
+        <div style="
+          margin-top: 6px;
+          padding: 10px;
+          background: linear-gradient(135deg, #FEF2F2, #FFF1F2);
+          border-radius: 8px;
+          border: 1px solid #FECACA;
+        ">
+          <div style="font-size: 11px; color: #DC2626; font-weight: 600; margin-bottom: 4px;">⚠ 需要关注</div>
+          <div style="font-size: 11px; color: #7F1D1D; line-height: 1.5;">
+            该区域超时订单聚集，建议：<br/>
+            • 排查门禁/电梯等末端配送问题<br/>
+            • 考虑与物业协商改善通行条件
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+  
+  const infoWindow = new AMap.InfoWindow({
+    content: infoContent,
+    offset: new AMap.Pixel(0, 0)
+  })
+  
+  infoWindow.open(mapInstance, [cluster.center.lon, cluster.center.lat])
+}
+
+// ==================== 图层监听 ====================
+
 // 监听当前选中门店变化
 watch(() => appStore.currentStoreId, (storeId) => {
   if (!mapInstance || !storeId) return
@@ -378,22 +681,33 @@ watch(() => appStore.currentStoreId, (storeId) => {
   }
 })
 
-// 监听服务范围图层可见性变化
+// 监听图层可见性变化
 watch(() => appStore.visibleLayers, (layers) => {
   if (!mapInstance) return
   
-  const showServiceArea = layers.includes('serviceArea')
+  // 门店标记
+  const showStores = layers.includes('stores')
+  storeMarkers.forEach(m => showStores ? m.show() : m.hide())
   
+  // 服务范围
+  const showServiceArea = layers.includes('serviceArea')
   if (showServiceArea && serviceAreaPolygons.length === 0) {
-    // 图层打开且多边形未绘制，添加多边形
     addServiceAreas()
-  } else if (!showServiceArea && serviceAreaPolygons.length > 0) {
-    // 图层关闭，隐藏多边形
-    serviceAreaPolygons.forEach(p => p.hide())
-  } else if (showServiceArea && serviceAreaPolygons.length > 0) {
-    // 图层打开，显示多边形
-    serviceAreaPolygons.forEach(p => p.show())
+  } else {
+    serviceAreaPolygons.forEach(p => showServiceArea ? p.show() : p.hide())
   }
+  
+  // 热力图
+  const showHeatmap = layers.includes('heatmap')
+  if (heatmapLayer) {
+    showHeatmap ? heatmapLayer.show() : heatmapLayer.hide()
+  }
+  
+  // 超时订单
+  const showTimeout = layers.includes('timeout')
+  timeoutMarkers.forEach(m => showTimeout ? m.show() : m.hide())
+  timeoutClusterCircles.forEach(c => showTimeout ? c.show() : c.hide())
+  
 }, { deep: true })
 </script>
 
@@ -495,5 +809,25 @@ watch(() => appStore.visibleLayers, (layers) => {
 
 :deep(.amap-info-close:hover) {
   color: #E2231A !important;
+}
+
+/* 超时订单脉冲动画 */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    transform: scale(1.2);
+    box-shadow: 0 2px 12px rgba(239, 68, 68, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  }
+}
+
+:deep(.timeout-marker) {
+  animation: pulse 2s infinite;
 }
 </style>

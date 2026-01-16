@@ -4,26 +4,126 @@ import { STORES } from '@/data/stores'
 /**
  * 生成热力图数据点
  * 用于高德地图 HeatMap 图层
+ * 特点：
+ * 1. 大部分区域是中低密度，颜色有明显变化
+ * 2. 少数热点区域呈现橙红色
+ * 3. 热点分布随机，形状自然不规则
  */
 export function generateHeatmapData(): { lng: number; lat: number; count: number }[] {
   const points: { lng: number; lat: number; count: number }[] = []
   
+  // 使用固定种子让热点位置稳定
+  const seed = 42
+  const seededRandom = createSeededRandom(seed)
+  
   for (const store of STORES) {
-    // 每个门店生成 200 个订单点
     const orderCount = store.daily_orders || 300
-    for (let i = 0; i < orderCount; i++) {
-      // 距离衰减分布：离门店越近点越密集
-      const distance = Math.random() ** 2 * 3 // 0-3km
+    
+    // 1. 背景层：稀疏的低密度点（40%）- 蓝色区域
+    const bgCount = Math.floor(orderCount * 0.4)
+    for (let i = 0; i < bgCount; i++) {
+      const distance = Math.random() ** 1.2 * 3.5
       const angle = Math.random() * 2 * Math.PI
-      
-      const latOffset = (distance * Math.cos(angle)) / 111
-      const lonOffset = (distance * Math.sin(angle)) / 85
+      const noise = (Math.random() - 0.5) * 0.2
       
       points.push({
-        lng: store.lon + lonOffset,
-        lat: store.lat + latOffset,
-        count: Math.floor(Math.random() * 10) + 1 // 权重1-10
+        lng: store.lon + (distance * Math.sin(angle) + noise) / 85,
+        lat: store.lat + (distance * Math.cos(angle) + noise) / 111,
+        count: 1 + Math.floor(Math.random() * 2)  // 权重1-2
       })
+    }
+    
+    // 2. 中间层：门店周边1-2km的中等密度区域（30%）- 绿色/青色区域
+    const midCount = Math.floor(orderCount * 0.3)
+    for (let i = 0; i < midCount; i++) {
+      const distance = 0.3 + Math.random() * 1.5  // 0.3-1.8km
+      const angle = Math.random() * 2 * Math.PI
+      const noise = (Math.random() - 0.5) * 0.15
+      
+      points.push({
+        lng: store.lon + (distance * Math.sin(angle) + noise) / 85,
+        lat: store.lat + (distance * Math.cos(angle) + noise) / 111,
+        count: 3 + Math.floor(Math.random() * 4)  // 权重3-6
+      })
+    }
+    
+    // 3. 门店核心区域：高密度（15%）- 黄色区域
+    const coreCount = Math.floor(orderCount * 0.15)
+    for (let i = 0; i < coreCount; i++) {
+      const distance = Math.random() ** 2 * 0.8  // 0-0.8km，集中在门店附近
+      const angle = Math.random() * 2 * Math.PI
+      const noise = (Math.random() - 0.5) * 0.08
+      
+      points.push({
+        lng: store.lon + (distance * Math.sin(angle) + noise) / 85,
+        lat: store.lat + (distance * Math.cos(angle) + noise) / 111,
+        count: 6 + Math.floor(Math.random() * 5)  // 权重6-10
+      })
+    }
+    
+    // 4. 热点区域：1-2个明显的红色热点
+    const hasHotspot = seededRandom() > 0.25  // 75%概率有热点
+    if (hasHotspot) {
+      const hotspotCount = seededRandom() > 0.5 ? 2 : 1
+      
+      for (let h = 0; h < hotspotCount; h++) {
+        // 热点位置
+        const hotspotDist = 0.8 + seededRandom() * 1.2
+        const hotspotAngle = seededRandom() * 2 * Math.PI
+        const hotspotLat = store.lat + (hotspotDist * Math.cos(hotspotAngle)) / 111
+        const hotspotLon = store.lon + (hotspotDist * Math.sin(hotspotAngle)) / 85
+        
+        // 热点外围 - 黄色过渡区（椭圆形不规则）
+        const outerCount = 25 + Math.floor(seededRandom() * 20)
+        const ellipseAngle = seededRandom() * Math.PI
+        const a = 0.25 + seededRandom() * 0.15
+        const b = 0.12 + seededRandom() * 0.08
+        
+        for (let i = 0; i < outerCount; i++) {
+          const r = 0.3 + Math.sqrt(Math.random()) * 0.7
+          const theta = Math.random() * 2 * Math.PI
+          
+          let dx = r * Math.cos(theta) * a
+          let dy = r * Math.sin(theta) * b
+          const rotatedDx = dx * Math.cos(ellipseAngle) - dy * Math.sin(ellipseAngle)
+          const rotatedDy = dx * Math.sin(ellipseAngle) + dy * Math.cos(ellipseAngle)
+          const noise = (Math.random() - 0.5) * 0.06
+          
+          points.push({
+            lng: hotspotLon + rotatedDx / 85 + noise / 85,
+            lat: hotspotLat + rotatedDy / 111 + noise / 111,
+            count: 8 + Math.floor(Math.random() * 6)  // 权重8-13
+          })
+        }
+        
+        // 热点核心 - 橙红色区域
+        const coreCount = 15 + Math.floor(seededRandom() * 12)
+        for (let i = 0; i < coreCount; i++) {
+          const r = Math.random() * 0.12
+          const theta = Math.random() * 2 * Math.PI
+          let dx = r * Math.cos(theta) * a * 0.5
+          let dy = r * Math.sin(theta) * b * 0.5
+          const rotatedDx = dx * Math.cos(ellipseAngle) - dy * Math.sin(ellipseAngle)
+          const rotatedDy = dx * Math.sin(ellipseAngle) + dy * Math.cos(ellipseAngle)
+          
+          points.push({
+            lng: hotspotLon + rotatedDx / 85,
+            lat: hotspotLat + rotatedDy / 111,
+            count: 14 + Math.floor(Math.random() * 8)  // 权重14-21
+          })
+        }
+        
+        // 热点中心 - 最红的几个点
+        for (let i = 0; i < 5; i++) {
+          const microR = Math.random() * 0.03
+          const microTheta = Math.random() * 2 * Math.PI
+          points.push({
+            lng: hotspotLon + (microR * Math.cos(microTheta)) / 85,
+            lat: hotspotLat + (microR * Math.sin(microTheta)) / 111,
+            count: 20 + Math.floor(Math.random() * 10)  // 权重20-29
+          })
+        }
+      }
     }
   }
   
@@ -31,40 +131,130 @@ export function generateHeatmapData(): { lng: number; lat: number; count: number
 }
 
 /**
+ * 创建带种子的随机数生成器（让热点位置稳定）
+ */
+function createSeededRandom(seed: number): () => number {
+  let s = seed
+  return () => {
+    s = (s * 9301 + 49297) % 233280
+    return s / 233280
+  }
+}
+
+/**
  * 生成所有门店的超时订单
+ * 特点：
+ * 1. 总体数量很少（每天只有几单超时是正常的）
+ * 2. 超时订单聚集在1-2个"问题区域"（如某个封闭小区）
+ * 3. 其他地方只有零星几个
  */
 export function getAllTimeoutOrders(): TimeoutOrder[] {
   const allOrders: TimeoutOrder[] = []
-  for (const store of STORES) {
-    allOrders.push(...generateTimeoutOrders(store.id))
-  }
+  
+  // 使用固定种子保持稳定
+  const seed = 123
+  const seededRandom = createSeededRandom(seed)
+  
+  // 定义1-2个"问题区域"（配送黑洞）
+  // 选择2个门店附近作为问题区域
+  const problemAreas = [
+    {
+      // 姚家园店东北方向 - 某封闭小区
+      baseLat: 39.941334 + 0.015,
+      baseLon: 116.515733 + 0.012,
+      name: '阳光花园小区',
+      reason: '小区门禁限制',
+      count: 8  // 这个区域有8单超时
+    },
+    {
+      // 东土城路店西南方向 - 某写字楼
+      baseLat: 39.954024 - 0.008,
+      baseLon: 116.433021 - 0.010,
+      name: '科技园写字楼',
+      reason: '电梯等待时间长',
+      count: 5  // 这个区域有5单超时
+    }
+  ]
+  
+  // 在问题区域生成聚集的超时订单
+  problemAreas.forEach((area, areaIndex) => {
+    for (let i = 0; i < area.count; i++) {
+      // 聚集在小范围内（约200-400米范围）
+      const r = 0.1 + seededRandom() * 0.2
+      const theta = seededRandom() * 2 * Math.PI
+      
+      const lat = area.baseLat + (r * Math.cos(theta)) / 111
+      const lon = area.baseLon + (r * Math.sin(theta)) / 85
+      
+      const duration = 35 + Math.floor(seededRandom() * 12)  // 35-46分钟
+      
+      allOrders.push({
+        order_id: `TO${areaIndex}${String(i + 1).padStart(3, '0')}`,
+        lat,
+        lon,
+        duration,
+        timeout_duration: duration - 30,
+        reason: area.reason,
+        reason_category: area.reason === '小区门禁限制' ? '门禁类' : '等待类'
+      })
+    }
+  })
+  
+  // 在其他区域添加零星几个超时订单（每个门店0-1个）
+  STORES.forEach((store, idx) => {
+    // 只有30%的门店有零星超时
+    if (seededRandom() > 0.7) {
+      const distance = 1.5 + seededRandom() * 1.5
+      const angle = seededRandom() * 2 * Math.PI
+      
+      const lat = store.lat + (distance * Math.cos(angle)) / 111
+      const lon = store.lon + (distance * Math.sin(angle)) / 85
+      
+      const reasons = ['配送距离过远', '用户不在家', '地下车库难找']
+      const reason = reasons[Math.floor(seededRandom() * reasons.length)]!
+      const duration = 32 + Math.floor(seededRandom() * 8)  // 32-39分钟
+      
+      allOrders.push({
+        order_id: `TOS${idx}001`,
+        lat,
+        lon,
+        duration,
+        timeout_duration: duration - 30,
+        reason,
+        reason_category: '其他'
+      })
+    }
+  })
+  
   return allOrders
 }
 
 /**
  * 识别超时订单聚集区域
  * 使用网格聚类方法
+ * 阈值降低到3单，因为现在超时订单总数很少
  */
 export function identifyTimeoutClusters(
   orders: TimeoutOrder[],
-  gridSize: number = 0.01 // 约1km网格
+  gridSize: number = 0.008 // 约800米网格（更小的网格更精确）
 ): { center: { lat: number; lon: number }; count: number; radius: number }[] {
   // 构建网格
-  const grid = new Map<string, TimeoutOrder[]>()
+  const grid: { [key: string]: TimeoutOrder[] } = {}
   
   for (const order of orders) {
     const gridKey = `${Math.floor(order.lat / gridSize)}_${Math.floor(order.lon / gridSize)}`
-    if (!grid.has(gridKey)) {
-      grid.set(gridKey, [])
+    if (!grid[gridKey]) {
+      grid[gridKey] = []
     }
-    grid.get(gridKey)!.push(order)
+    grid[gridKey].push(order)
   }
   
-  // 找出超时订单密集的网格（≥5单）
+  // 找出超时订单密集的网格（≥3单即可标记为问题区域）
   const clusters: { center: { lat: number; lon: number }; count: number; radius: number }[] = []
   
-  for (const [, cellOrders] of grid) {
-    if (cellOrders.length >= 5) {
+  for (const key in grid) {
+    const cellOrders = grid[key]!
+    if (cellOrders.length >= 3) {
       // 计算聚集区域中心
       const centerLat = cellOrders.reduce((sum: number, o: TimeoutOrder) => sum + o.lat, 0) / cellOrders.length
       const centerLon = cellOrders.reduce((sum: number, o: TimeoutOrder) => sum + o.lon, 0) / cellOrders.length
@@ -82,7 +272,7 @@ export function identifyTimeoutClusters(
       clusters.push({
         center: { lat: centerLat, lon: centerLon },
         count: cellOrders.length,
-        radius: Math.max(maxDist + 100, 300) // 至少300米半径
+        radius: Math.max(maxDist + 80, 250) // 至少250米半径
       })
     }
   }
@@ -135,61 +325,6 @@ export function generateMockOrders(storeId: number, count: number = 100): Order[
   }
 
   return orders
-}
-
-/**
- * 生成超时订单数据
- */
-export function generateTimeoutOrders(storeId: number): TimeoutOrder[] {
-  const store = STORES.find(s => s.id === storeId)
-  if (!store) return []
-
-  const reasons = [
-    { reason: '配送距离过远', category: '距离类', weight: 0.35 },
-    { reason: '小区门禁限制', category: '门禁类', weight: 0.25 },
-    { reason: '电梯等待时间长', category: '等待类', weight: 0.15 },
-    { reason: '地下车库难找', category: '末端配送类', weight: 0.10 },
-    { reason: '用户不在家', category: '用户类', weight: 0.08 },
-    { reason: '交通拥堵', category: '交通类', weight: 0.07 }
-  ]
-
-  const timeoutCount = store.timeout_orders || 40
-  const timeoutOrders: TimeoutOrder[] = []
-
-  for (let i = 0; i < timeoutCount; i++) {
-    // 超时订单更可能在服务范围边缘
-    const distance = 1.5 + Math.random() * 2 // 1.5-3.5km
-    const angle = Math.random() * 2 * Math.PI
-    
-    const latOffset = (distance * Math.cos(angle)) / 111
-    const lonOffset = (distance * Math.sin(angle)) / 85
-
-    // 随机选择超时原因
-    const rand = Math.random()
-    let cumWeight = 0
-    let selectedReason = reasons[0]!
-    for (const r of reasons) {
-      cumWeight += r.weight
-      if (rand <= cumWeight) {
-        selectedReason = r
-        break
-      }
-    }
-
-    const duration = 31 + Math.floor(Math.random() * 20) // 31-50分钟
-
-    timeoutOrders.push({
-      order_id: `TO2026011600${String(i + 1).padStart(4, '0')}`,
-      lat: store.lat + latOffset,
-      lon: store.lon + lonOffset,
-      duration,
-      timeout_duration: duration - 30,
-      reason: selectedReason!.reason,
-      reason_category: selectedReason!.category
-    })
-  }
-
-  return timeoutOrders
 }
 
 /**
