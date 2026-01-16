@@ -4,7 +4,7 @@
 
 **在线演示：** [https://7freshmap.jason12138.com/](https://7freshmap.jason12138.com/)
 
-![项目预览](docs/images/preview.png)
+![项目预览](docs/images/preview.jpg)
 
 ---
 
