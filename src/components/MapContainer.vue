@@ -1109,7 +1109,7 @@ watch(() => appStore.visibleLayers.includes('route'), (visible) => {
     </div>
 
     <!-- 图例 - 移动端底部居中，桌面端右下角 -->
-    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 lg:bottom-6 lg:left-auto lg:right-[416px] lg:translate-x-0 bg-surface/95 backdrop-blur-sm px-3 py-2 lg:px-4 lg:py-3 rounded-xl shadow-card border border-border-light">
+    <div class="absolute bottom-28 left-1/2 -translate-x-1/2 lg:bottom-6 lg:left-auto lg:right-[416px] lg:translate-x-0 bg-surface/95 backdrop-blur-sm px-3 py-2 lg:px-4 lg:py-3 rounded-xl shadow-card border border-border-light">
       <div class="flex items-center gap-2 lg:gap-4 text-xs">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-status-success"></span>

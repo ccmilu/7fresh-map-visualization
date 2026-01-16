@@ -41,7 +41,7 @@ function handleAlertClick() {
         v-if="hasHighPriorityAlert"
         @click="handleAlertClick"
         :class="[
-          'absolute bottom-20 lg:bottom-6 left-1/2 translate-x-[180%] lg:left-auto lg:right-[300px] lg:translate-x-0 z-50 flex items-center gap-2 px-3 py-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors',
+          'absolute bottom-28 lg:bottom-6 left-1/2 translate-x-[180%] lg:left-auto lg:right-[300px] lg:translate-x-0 z-50 flex items-center gap-2 px-3 py-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors',
           isAlertAnimating ? 'alert-pulse' : ''
         ]"
         title="有紧急洞察需要关注"
@@ -60,7 +60,7 @@ function handleAlertClick() {
       <!-- 移动端展开侧边栏按钮 -->
       <button 
         @click="sidebarOpen = !sidebarOpen"
-        class="lg:hidden absolute bottom-4 right-4 z-50 w-12 h-12 bg-jd-red text-white rounded-full shadow-lg flex items-center justify-center"
+        class="lg:hidden absolute bottom-12 right-4 z-50 w-12 h-12 bg-jd-red text-white rounded-full shadow-lg flex items-center justify-center"
       >
         <svg v-if="!sidebarOpen" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m9 18 6-6-6-6"/>
