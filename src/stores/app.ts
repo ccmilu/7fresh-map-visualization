@@ -12,6 +12,7 @@ export const useAppStore = defineStore('app', () => {
   const heatmapStoreId = ref<number | null>(null) // null 表示显示所有门店热力图
   const routeStoreId = ref<number>(1) // 路径分析的门店ID
   const deliveryTrips = ref<DeliveryTrip[]>(generateDeliveryTrips(1, 5)) // 配送行程数据
+  const resetVersion = ref(0) // 视图重置触发器
 
   // 计算属性
   const currentStore = computed<Store | null>(() => {
@@ -63,6 +64,9 @@ export const useAppStore = defineStore('app', () => {
     visibleLayers.value = ['stores', 'serviceArea', 'heatmap', 'timeout']
     selectedTripId.value = null
     heatmapStoreId.value = null
+    routeStoreId.value = 1
+    deliveryTrips.value = generateDeliveryTrips(1, 5)
+    resetVersion.value++
   }
 
   // 设置热力图显示的门店
@@ -91,6 +95,7 @@ export const useAppStore = defineStore('app', () => {
     heatmapStoreId,
     routeStoreId,
     deliveryTrips,
+    resetVersion,
     // 计算属性
     currentStore,
     isLayerVisible,

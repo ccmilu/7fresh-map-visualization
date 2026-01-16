@@ -15,6 +15,9 @@ const mapError = ref<string | null>(null)
 let mapInstance: any = null
 let AMap: any = null
 
+const DEFAULT_CENTER: [number, number] = [116.497, 39.944] // 北京朝阳区中心
+const DEFAULT_ZOOM = 12.6
+
 // 门店标记点
 const storeMarkers: any[] = []
 
@@ -55,8 +58,8 @@ async function initMap() {
 
     mapInstance = new AMap.Map(mapContainer.value, {
       viewMode: '2D',
-      zoom: 12.6,
-      center: [116.497, 39.944], // 北京朝阳区中心
+      zoom: DEFAULT_ZOOM,
+      center: DEFAULT_CENTER,
       mapStyle: 'amap://styles/light',
       resizeEnable: true
     })
@@ -718,6 +721,14 @@ watch(() => appStore.heatmapStoreId, () => {
   updateHeatmapData()
 })
 
+// 监听重置视图
+watch(() => appStore.resetVersion, () => {
+  if (!mapInstance) return
+  mapInstance.setZoomAndCenter(DEFAULT_ZOOM, DEFAULT_CENTER)
+  mapInstance.setRotation?.(0)
+  mapInstance.setPitch?.(0)
+})
+
 // ==================== 配送路径相关 ====================
 
 // 绘制配送路径
@@ -763,7 +774,6 @@ function drawDeliveryRoute(trip: DeliveryTrip) {
   addDeliveryPointMarkers(trip)
   
   // 调整视野以包含所有路径点
-  const allPoints = [...actualPath, ...optimalPath]
   mapInstance.setFitView([actualPathPolyline, optimalPathPolyline], false, [50, 50, 50, 400])
 }
 
