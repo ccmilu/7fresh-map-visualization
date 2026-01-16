@@ -67,23 +67,29 @@ function addStoreMarkers() {
   storeMarkers.length = 0
 
   STORES.forEach(store => {
-    // 创建自定义标记内容 - 现代简约风格
+    // 根据准时率获取颜色
+    const rate = store.on_time_rate * 100
+    const bgColor = getOnTimeBgColor(rate)
+    const borderColor = getOnTimeBorderColor(rate)
+    const iconBgColor = getOnTimeColor(rate)
+    
+    // 创建自定义标记内容 - 根据准时率显示不同背景色
     const markerContent = `
       <div class="store-marker" style="
         display: flex;
         align-items: center;
         gap: 6px;
-        background: #FFFFFF;
+        background: ${bgColor};
         color: #0F172A;
         padding: 8px 14px;
         border-radius: 12px;
         font-size: 13px;
         font-weight: 500;
         white-space: nowrap;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.08);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.06);
         cursor: pointer;
         transform: translateX(-50%);
-        border: 1px solid #E2E8F0;
+        border: 2px solid ${borderColor};
         transition: all 0.2s ease;
       ">
         <span style="
@@ -92,7 +98,7 @@ function addStoreMarkers() {
           justify-content: center;
           width: 24px;
           height: 24px;
-          background: #E2231A;
+          background: ${iconBgColor};
           border-radius: 6px;
           color: white;
         ">${storeIconSvg}</span>
@@ -123,6 +129,27 @@ function getOnTimeRateColor(rate: number): string {
   if (rate >= 0.9) return '#10B981'
   if (rate >= 0.85) return '#F59E0B'
   return '#EF4444'
+}
+
+// 获取准时率对应的颜色
+const getOnTimeColor = (rate: number) => {
+  if (rate >= 90) return '#22C55E'
+  if (rate >= 85) return '#F59E0B'
+  return '#EF4444'
+}
+
+// 获取准时率对应的背景色（用于标记点）
+const getOnTimeBgColor = (rate: number) => {
+  if (rate >= 90) return '#DCFCE7' // 浅绿
+  if (rate >= 85) return '#FEF3C7' // 浅黄
+  return '#FEE2E2' // 浅红
+}
+
+// 获取准时率对应的边框色
+const getOnTimeBorderColor = (rate: number) => {
+  if (rate >= 90) return '#86EFAC'
+  if (rate >= 85) return '#FCD34D'
+  return '#FCA5A5'
 }
 
 // 显示门店信息窗口
@@ -273,7 +300,7 @@ watch(() => appStore.currentStoreId, (storeId) => {
     </div>
 
     <!-- 图例 -->
-    <div class="absolute bottom-6 left-4 bg-surface/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-card border border-border-light">
+    <div class="absolute bottom-6 right-[416px] bg-surface/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-card border border-border-light">
       <div class="flex items-center gap-4 text-xs">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-status-success"></span>

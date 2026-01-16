@@ -37,9 +37,9 @@ export const STORES: Store[] = [
     lat: 39.954024,
     lon: 116.433021,
     daily_orders: 290,
-    on_time_rate: 0.85,
-    avg_delivery_time: 26,
-    timeout_orders: 44
+    on_time_rate: 0.82,
+    avg_delivery_time: 28,
+    timeout_orders: 52
   },
   {
     id: 5,

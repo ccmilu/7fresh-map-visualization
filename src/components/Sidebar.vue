@@ -5,13 +5,14 @@ import { STORES, getSummaryData } from '@/data/stores'
 import { generateInsights } from '@/utils/mockData'
 import type { LayerType } from '@/types'
 import Icon from './icons/Icon.vue'
+import type { IconName } from './icons/index'
 
 const appStore = useAppStore()
 const summaryData = getSummaryData()
 const insights = generateInsights()
 
 // 图层配置
-const layerConfig: { key: LayerType; label: string; icon: string }[] = [
+const layerConfig: { key: LayerType; label: string; icon: IconName }[] = [
   { key: 'stores', label: '门店位置', icon: 'store' },
   { key: 'serviceArea', label: '服务覆盖范围', icon: 'target' },
   { key: 'heatmap', label: '订单热力图', icon: 'flame' },
@@ -24,11 +25,23 @@ const selectedStore = computed(() => {
   return appStore.currentStore
 })
 
-// 获取准时率颜色
+// 获取准时率文字颜色
 function getOnTimeRateColor(rate: number): string {
-  if (rate >= 0.92) return 'text-status-success'
-  if (rate >= 0.88) return 'text-status-warning'
+  if (rate >= 0.9) return 'text-status-success'
+  if (rate >= 0.85) return 'text-status-warning'
   return 'text-status-danger'
+}
+
+// 获取门店卡片背景色（根据准时率）
+function getStoreCardBg(rate: number, isSelected: boolean): string {
+  if (isSelected) {
+    if (rate >= 0.9) return 'bg-emerald-100/70 border-emerald-300'
+    if (rate >= 0.85) return 'bg-amber-100/70 border-amber-300'
+    return 'bg-red-100/70 border-red-300'
+  }
+  if (rate >= 0.9) return 'bg-emerald-50/50 border-emerald-200/60 hover:bg-emerald-100/50'
+  if (rate >= 0.85) return 'bg-amber-50/50 border-amber-200/60 hover:bg-amber-100/50'
+  return 'bg-red-50/50 border-red-200/60 hover:bg-red-100/50'
 }
 
 // 获取洞察样式
@@ -138,9 +151,11 @@ function getInsightIconColor(type: string): string {
             @click="appStore.selectStore(store.id)"
             :class="[
               'store-card p-3 rounded-xl border cursor-pointer transition-all',
-              selectedStore?.id === store.id 
-                ? 'border-jd-red bg-red-50/50 shadow-card' 
-                : 'border-border-light bg-surface hover:bg-surface-secondary hover:shadow-card'
+              getStoreCardBg(store.on_time_rate, selectedStore?.id === store.id),
+              selectedStore?.id === store.id ? 'shadow-card ring-1 ring-offset-1' : 'hover:shadow-card',
+              selectedStore?.id === store.id && store.on_time_rate >= 0.9 ? 'ring-emerald-400' : '',
+              selectedStore?.id === store.id && store.on_time_rate >= 0.85 && store.on_time_rate < 0.9 ? 'ring-amber-400' : '',
+              selectedStore?.id === store.id && store.on_time_rate < 0.85 ? 'ring-red-400' : ''
             ]"
           >
             <div class="flex items-start justify-between">
