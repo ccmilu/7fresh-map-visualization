@@ -78,7 +78,7 @@ export function generateTimeoutOrders(storeId: number): TimeoutOrder[] {
     // 随机选择超时原因
     const rand = Math.random()
     let cumWeight = 0
-    let selectedReason = reasons[0]
+    let selectedReason = reasons[0]!
     for (const r of reasons) {
       cumWeight += r.weight
       if (rand <= cumWeight) {
@@ -95,8 +95,8 @@ export function generateTimeoutOrders(storeId: number): TimeoutOrder[] {
       lon: store.lon + lonOffset,
       duration,
       timeout_duration: duration - 30,
-      reason: selectedReason.reason,
-      reason_category: selectedReason.category
+      reason: selectedReason!.reason,
+      reason_category: selectedReason!.category
     })
   }
 
@@ -164,7 +164,7 @@ function calculateOptimalPath(orders: { seq: number; lat: number; lon: number }[
 
   const path: { lat: number; lon: number }[] = []
   const remaining = [...orders.slice(1)] // 除门店外的点
-  let current = orders[0] // 从门店出发
+  let current = orders[0]! // 从门店出发
   
   path.push({ lat: current.lat, lon: current.lon })
 
@@ -174,9 +174,10 @@ function calculateOptimalPath(orders: { seq: number; lat: number; lon: number }[
     let minIndex = 0
     
     for (let i = 0; i < remaining.length; i++) {
+      const point = remaining[i]!
       const dist = Math.sqrt(
-        Math.pow((remaining[i].lat - current.lat) * 111, 2) +
-        Math.pow((remaining[i].lon - current.lon) * 85, 2)
+        Math.pow((point.lat - current.lat) * 111, 2) +
+        Math.pow((point.lon - current.lon) * 85, 2)
       )
       if (dist < minDist) {
         minDist = dist
@@ -184,7 +185,7 @@ function calculateOptimalPath(orders: { seq: number; lat: number; lon: number }[
       }
     }
 
-    current = remaining[minIndex]
+    current = remaining[minIndex]!
     path.push({ lat: current.lat, lon: current.lon })
     remaining.splice(minIndex, 1)
   }
@@ -198,9 +199,11 @@ function calculateOptimalPath(orders: { seq: number; lat: number; lon: number }[
 function calculatePathDuration(path: { lat: number; lon: number }[]): number {
   let totalDist = 0
   for (let i = 1; i < path.length; i++) {
+    const curr = path[i]!
+    const prev = path[i-1]!
     totalDist += Math.sqrt(
-      Math.pow((path[i].lat - path[i-1].lat) * 111, 2) +
-      Math.pow((path[i].lon - path[i-1].lon) * 85, 2)
+      Math.pow((curr.lat - prev.lat) * 111, 2) +
+      Math.pow((curr.lon - prev.lon) * 85, 2)
     )
   }
   // 假设平均骑行速度20km/h，加上每单3分钟停留

@@ -57,9 +57,11 @@ function calculatePolygonArea(polygon: Coordinate[]): number {
 
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n
+    const pi = polygon[i]!
+    const pj = polygon[j]!
     // 使用Shoelace公式
-    area += polygon[i].lon * polygon[j].lat
-    area -= polygon[j].lon * polygon[i].lat
+    area += pi.lon * pj.lat
+    area -= pj.lon * pi.lat
   }
 
   area = Math.abs(area) / 2
@@ -83,7 +85,8 @@ export function simplifyPolygon(polygon: Coordinate[], maxPoints: number = 12): 
   const simplified: Coordinate[] = []
   
   for (let i = 0; i < polygon.length; i += step) {
-    simplified.push(polygon[i])
+    const point = polygon[i]
+    if (point) simplified.push(point)
   }
 
   return simplified
