@@ -2,6 +2,95 @@ import type { Order, TimeoutOrder, DeliveryTrip, Insight } from '@/types'
 import { STORES } from '@/data/stores'
 
 /**
+ * 生成热力图数据点
+ * 用于高德地图 HeatMap 图层
+ */
+export function generateHeatmapData(): { lng: number; lat: number; count: number }[] {
+  const points: { lng: number; lat: number; count: number }[] = []
+  
+  for (const store of STORES) {
+    // 每个门店生成 200 个订单点
+    const orderCount = store.daily_orders || 300
+    for (let i = 0; i < orderCount; i++) {
+      // 距离衰减分布：离门店越近点越密集
+      const distance = Math.random() ** 2 * 3 // 0-3km
+      const angle = Math.random() * 2 * Math.PI
+      
+      const latOffset = (distance * Math.cos(angle)) / 111
+      const lonOffset = (distance * Math.sin(angle)) / 85
+      
+      points.push({
+        lng: store.lon + lonOffset,
+        lat: store.lat + latOffset,
+        count: Math.floor(Math.random() * 10) + 1 // 权重1-10
+      })
+    }
+  }
+  
+  return points
+}
+
+/**
+ * 生成所有门店的超时订单
+ */
+export function getAllTimeoutOrders(): TimeoutOrder[] {
+  const allOrders: TimeoutOrder[] = []
+  for (const store of STORES) {
+    allOrders.push(...generateTimeoutOrders(store.id))
+  }
+  return allOrders
+}
+
+/**
+ * 识别超时订单聚集区域
+ * 使用网格聚类方法
+ */
+export function identifyTimeoutClusters(
+  orders: TimeoutOrder[],
+  gridSize: number = 0.01 // 约1km网格
+): { center: { lat: number; lon: number }; count: number; radius: number }[] {
+  // 构建网格
+  const grid = new Map<string, TimeoutOrder[]>()
+  
+  for (const order of orders) {
+    const gridKey = `${Math.floor(order.lat / gridSize)}_${Math.floor(order.lon / gridSize)}`
+    if (!grid.has(gridKey)) {
+      grid.set(gridKey, [])
+    }
+    grid.get(gridKey)!.push(order)
+  }
+  
+  // 找出超时订单密集的网格（≥5单）
+  const clusters: { center: { lat: number; lon: number }; count: number; radius: number }[] = []
+  
+  for (const [, cellOrders] of grid) {
+    if (cellOrders.length >= 5) {
+      // 计算聚集区域中心
+      const centerLat = cellOrders.reduce((sum: number, o: TimeoutOrder) => sum + o.lat, 0) / cellOrders.length
+      const centerLon = cellOrders.reduce((sum: number, o: TimeoutOrder) => sum + o.lon, 0) / cellOrders.length
+      
+      // 计算半径（最远点距离）
+      let maxDist = 0
+      for (const order of cellOrders) {
+        const dist = Math.sqrt(
+          Math.pow((order.lat - centerLat) * 111000, 2) +
+          Math.pow((order.lon - centerLon) * 85000, 2)
+        )
+        maxDist = Math.max(maxDist, dist)
+      }
+      
+      clusters.push({
+        center: { lat: centerLat, lon: centerLon },
+        count: cellOrders.length,
+        radius: Math.max(maxDist + 100, 300) // 至少300米半径
+      })
+    }
+  }
+  
+  return clusters
+}
+
+/**
  * 生成模拟订单数据
  * 按照距离衰减模型：离门店越近订单越多
  */
